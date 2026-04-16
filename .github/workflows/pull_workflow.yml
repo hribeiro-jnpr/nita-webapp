@@ -1,10 +1,10 @@
 name: Pull workflow
 
-on:  
+on:
   pull_request:
     branches:
       - main
-  workflow_dispatch:    
+  workflow_dispatch:
 
 jobs:
   lint:
@@ -26,10 +26,10 @@ jobs:
           VALIDATE_HTML: true
           JAVASCRIPT_ES_CONFIG_FILE: .eslintrc.json
           FILTER_REGEX_EXCLUDE: .*(components/|jquery-|jquery\.event|bootstrap\.min|ui_1\.11\.4|\.min\.js).*
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}    
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   security:
-    name: Static Security 
+    name: Static Security
     runs-on: ubuntu-latest
     permissions:
       security-events: write
@@ -44,7 +44,7 @@ jobs:
 
       - name: Run Microsoft Security DevOps
         uses: microsoft/security-devops-action@latest
-        id: msdo    
+        id: msdo
 
       - name: Upload results to Security tab
         uses: github/codeql-action/upload-sarif@v3
