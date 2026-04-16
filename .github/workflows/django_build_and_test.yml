@@ -51,4 +51,4 @@ jobs:
       - name: Run pytest suite
         run: |
           cd ../../../
-          pytest -q
+          pytest -v
