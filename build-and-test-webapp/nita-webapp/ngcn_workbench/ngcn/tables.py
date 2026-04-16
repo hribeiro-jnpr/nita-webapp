@@ -53,7 +53,7 @@ class CampusNetworkTable(tables.Table):
     description = tables.Column(verbose_name="Description")
     status = tables.Column(verbose_name="Status")
     campus_type = tables.Column(
-        verbose_name="Network Type", accessor="campus_type.name"
+        verbose_name="Network Type", accessor="campus_type__name"
     )
 
     class Meta:
@@ -68,7 +68,7 @@ class CampusNetworkTable(tables.Table):
 
 class ActionHistoryTable(tables.Table):
     # id = tables.CheckBoxColumn(accessor='pk')
-    action_id = tables.Column(verbose_name="Name", accessor="action_id.action_name")
+    action_id = tables.Column(verbose_name="Name", accessor="action_id__action_name")
     # description  = tables.Column(verbose_name="Description")
     timestamp = tables.Column(verbose_name="Timestamp")
     status = tables.Column(verbose_name="Status")
@@ -89,7 +89,7 @@ class ActionHistoryTable(tables.Table):
 class AllActionHistoryTable(tables.Table):
     # id = tables.CheckBoxColumn(accessor='pk')
     action_id = tables.Column(verbose_name="Name")
-    category_name = tables.Column(accessor="category_id.category_name")
+    category_name = tables.Column(accessor="category_id__category_name")
     #        description  = tables.Column(verbose_name="Description")
     timestamp = tables.Column(verbose_name="Timestamp")
     status = tables.Column(verbose_name="Status")
@@ -122,7 +122,7 @@ class ActionListTable(tables.Table):
     id = tables.Column(verbose_name="Id")
     action_name = tables.Column(verbose_name="Name")
     action_category = tables.Column(
-        verbose_name="Category", accessor="action_category.category_name"
+        verbose_name="Category", accessor="action_category__category_name"
     )
     jenkins_url = tables.Column(verbose_name="Jenkins Url")
     action_property = tables.Column(verbose_name="Shell Command")
@@ -145,7 +145,7 @@ class CampusNetworkActionListTable(tables.Table):
     id = tables.Column(verbose_name="Id")
     action_name = tables.Column(verbose_name="Name")
     action_category = tables.Column(
-        verbose_name="Category", accessor="action_category.category_name"
+        verbose_name="Category", accessor="action_category__category_name"
     )
     jenkins_url = tables.Column(verbose_name="Jenkins Url")
 
