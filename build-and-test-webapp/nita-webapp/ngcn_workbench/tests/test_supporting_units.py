@@ -32,7 +32,9 @@ def test_status_startup_service_middleware_calls_updater(monkeypatch):
         fake_updater.started = True
 
     fake_updater.startStatusUpdaterService = fake_start_status_updater_service
-    monkeypatch.setattr(statusupdater.StatusUpdater, "getInstance", staticmethod(lambda: fake_updater))
+    monkeypatch.setattr(
+        statusupdater.StatusUpdater, "getInstance", staticmethod(lambda: fake_updater)
+    )
 
     middleware = servicestartupmiddleware.StatusStartupServiceMiddleware()
     middleware.process_request(SimpleNamespace())
@@ -42,7 +44,9 @@ def test_status_startup_service_middleware_calls_updater(monkeypatch):
 
 def test_status_updater_get_build_status_uses_server_result(monkeypatch):
     updater = statusupdater.StatusUpdater()
-    updater.SERVER = SimpleNamespace(get_build_info=lambda _name, _number: {"result": "SUCCESS"})
+    updater.SERVER = SimpleNamespace(
+        get_build_info=lambda _name, _number: {"result": "SUCCESS"}
+    )
 
     assert updater.getBuildStatus("job-name", 1) == "SUCCESS"
 
@@ -97,12 +101,17 @@ def test_grid_data_manager_creates_updates_and_reads_sheets(campus_network):
     ]
     manager.create_or_update_db(campus_network.id, updated_sheets, "sample.xlsx")
 
-    assert Worksheets.objects.filter(workbook_id__campus_network_id=campus_network).count() == 1
+    assert (
+        Worksheets.objects.filter(workbook_id__campus_network_id=campus_network).count()
+        == 1
+    )
     assert manager.get_sheets_by_campus_network(campus_network.id) == updated_sheets
 
 
 @pytest.mark.django_db
-def test_model_string_representations(action_category, campus_type, campus_network, action):
+def test_model_string_representations(
+    action_category, campus_type, campus_network, action
+):
     action_property = ActionProperty.objects.create(
         shell_command="echo hello",
         output_path="/tmp/out",
@@ -116,8 +125,12 @@ def test_model_string_representations(action_category, campus_type, campus_netwo
         category_id=action_category,
         campus_network_id=campus_network,
     )
-    workbook = Workbook.objects.create(name="sample.xlsx", campus_network_id=campus_network)
-    worksheet = Worksheets.objects.create(name="sheet1", data="{}", workbook_id=workbook)
+    workbook = Workbook.objects.create(
+        name="sample.xlsx", campus_network_id=campus_network
+    )
+    worksheet = Worksheets.objects.create(
+        name="sheet1", data="{}", workbook_id=workbook
+    )
 
     assert str(action_category) == action_category.category_name
     assert str(campus_type) == campus_type.name

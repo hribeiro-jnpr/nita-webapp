@@ -54,7 +54,9 @@ class RaisingServer(FakeServer):
 
 
 @pytest.mark.django_db
-def test_upload_file_view_returns_workbook_payload(auth_client, campus_network, monkeypatch):
+def test_upload_file_view_returns_workbook_payload(
+    auth_client, campus_network, monkeypatch
+):
     sheets = [{"name": "sheet1", "sheet1": [{"host": "1.1.1.1"}]}]
     monkeypatch.setattr(views, "parse_workbook", lambda *_args: "success")
     monkeypatch.setattr(
@@ -113,7 +115,9 @@ def test_save_grid_data_view_updates_workbook(auth_client, campus_network, monke
 
 
 @pytest.mark.django_db
-def test_jenkins_console_log_view_strips_ansi(auth_client, action, campus_network, monkeypatch):
+def test_jenkins_console_log_view_strips_ansi(
+    auth_client, action, campus_network, monkeypatch
+):
     action_history = ActionHistory.objects.create(
         action_id=action,
         timestamp=views.timezone.now(),
@@ -128,14 +132,18 @@ def test_jenkins_console_log_view_strips_ansi(auth_client, action, campus_networ
         FakeServer(console_output="\x1b[31mhello\x1b[0m from jenkins"),
     )
 
-    response = auth_client.get(reverse("jenkinsconsoleLog", kwargs={"action_history_id": action_history.id}))
+    response = auth_client.get(
+        reverse("jenkinsconsoleLog", kwargs={"action_history_id": action_history.id})
+    )
 
     assert response.status_code == 200
     assert response.content.decode("utf-8") == "hello from jenkins"
 
 
 @pytest.mark.django_db
-def test_jenkins_console_log_view_uses_fallback_message(auth_client, action, campus_network, monkeypatch):
+def test_jenkins_console_log_view_uses_fallback_message(
+    auth_client, action, campus_network, monkeypatch
+):
     action_history = ActionHistory.objects.create(
         action_id=action,
         timestamp=views.timezone.now(),
@@ -146,7 +154,9 @@ def test_jenkins_console_log_view_uses_fallback_message(auth_client, action, cam
     )
     monkeypatch.setattr(views, "server", RaisingServer())
 
-    response = auth_client.get(reverse("jenkinsconsoleLog", kwargs={"action_history_id": action_history.id}))
+    response = auth_client.get(
+        reverse("jenkinsconsoleLog", kwargs={"action_history_id": action_history.id})
+    )
 
     assert response.status_code == 200
     assert "queued in the Jenkins Server" in response.content.decode("utf-8")
@@ -156,7 +166,11 @@ def test_jenkins_console_log_view_uses_fallback_message(auth_client, action, cam
 def test_add_campus_network_view_creates_network(auth_client, campus_type, monkeypatch):
     monkeypatch.setattr(views, "server", FakeServer(build_number=11))
     monkeypatch.setattr(views, "wait_and_get_build_status", lambda *_args: True)
-    monkeypatch.setattr(views.ServerProperties, "getWorkspaceLocation", staticmethod(lambda: "/workspace"))
+    monkeypatch.setattr(
+        views.ServerProperties,
+        "getWorkspaceLocation",
+        staticmethod(lambda: "/workspace"),
+    )
 
     response = auth_client.post(
         reverse("campusnetworkadd"),
@@ -177,11 +191,17 @@ def test_add_campus_network_view_creates_network(auth_client, campus_type, monke
 
 
 @pytest.mark.django_db
-def test_add_campus_network_view_cleans_up_on_failure(auth_client, campus_type, monkeypatch):
+def test_add_campus_network_view_cleans_up_on_failure(
+    auth_client, campus_type, monkeypatch
+):
     fake_server = FakeServer(build_number=11)
     monkeypatch.setattr(views, "server", fake_server)
     monkeypatch.setattr(views, "wait_and_get_build_status", lambda *_args: False)
-    monkeypatch.setattr(views.ServerProperties, "getWorkspaceLocation", staticmethod(lambda: "/workspace"))
+    monkeypatch.setattr(
+        views.ServerProperties,
+        "getWorkspaceLocation",
+        staticmethod(lambda: "/workspace"),
+    )
 
     response = auth_client.post(
         reverse("campusnetworkadd"),
@@ -202,7 +222,9 @@ def test_add_campus_network_view_cleans_up_on_failure(auth_client, campus_type, 
 
 
 @pytest.mark.django_db
-def test_add_campus_network_view_retries_on_forbidden(auth_client, campus_type, monkeypatch):
+def test_add_campus_network_view_retries_on_forbidden(
+    auth_client, campus_type, monkeypatch
+):
     class ForbiddenServer(FakeServer):
         def build_job(self, job_name, params):
             raise jenkins.JenkinsException("Forbidden: crumbs required")
@@ -211,7 +233,11 @@ def test_add_campus_network_view_retries_on_forbidden(auth_client, campus_type, 
     reauth_server = FakeServer(build_number=11)
     monkeypatch.setattr(views, "server", initial_server)
     monkeypatch.setattr(views, "wait_and_get_build_status", lambda *_args: True)
-    monkeypatch.setattr(views.ServerProperties, "getWorkspaceLocation", staticmethod(lambda: "/workspace"))
+    monkeypatch.setattr(
+        views.ServerProperties,
+        "getWorkspaceLocation",
+        staticmethod(lambda: "/workspace"),
+    )
     monkeypatch.setattr(views.jenkins, "Jenkins", lambda *args, **kwargs: reauth_server)
 
     response = auth_client.post(
@@ -232,11 +258,17 @@ def test_add_campus_network_view_retries_on_forbidden(auth_client, campus_type, 
 
 
 @pytest.mark.django_db
-def test_edit_campus_network_view_updates_hosts(auth_client, campus_network, monkeypatch):
+def test_edit_campus_network_view_updates_hosts(
+    auth_client, campus_network, monkeypatch
+):
     fake_server = FakeServer(build_number=12)
     monkeypatch.setattr(views, "server", fake_server)
     monkeypatch.setattr(views, "wait_and_get_build_status", lambda *_args: True)
-    monkeypatch.setattr(views.ServerProperties, "getWorkspaceLocation", staticmethod(lambda: "/workspace"))
+    monkeypatch.setattr(
+        views.ServerProperties,
+        "getWorkspaceLocation",
+        staticmethod(lambda: "/workspace"),
+    )
 
     response = auth_client.post(
         reverse("campusnetworkedit", kwargs={"campus_network_id": campus_network.id}),
@@ -256,11 +288,17 @@ def test_edit_campus_network_view_updates_hosts(auth_client, campus_network, mon
 
 
 @pytest.mark.django_db
-def test_edit_campus_network_view_reports_failure(auth_client, campus_network, monkeypatch):
+def test_edit_campus_network_view_reports_failure(
+    auth_client, campus_network, monkeypatch
+):
     fake_server = FakeServer(build_number=12)
     monkeypatch.setattr(views, "server", fake_server)
     monkeypatch.setattr(views, "wait_and_get_build_status", lambda *_args: False)
-    monkeypatch.setattr(views.ServerProperties, "getWorkspaceLocation", staticmethod(lambda: "/workspace"))
+    monkeypatch.setattr(
+        views.ServerProperties,
+        "getWorkspaceLocation",
+        staticmethod(lambda: "/workspace"),
+    )
 
     response = auth_client.post(
         reverse("campusnetworkedit", kwargs={"campus_network_id": campus_network.id}),
@@ -279,11 +317,17 @@ def test_edit_campus_network_view_reports_failure(auth_client, campus_network, m
 
 
 @pytest.mark.django_db
-def test_delete_campus_network_view_deletes_network(auth_client, campus_network, monkeypatch):
+def test_delete_campus_network_view_deletes_network(
+    auth_client, campus_network, monkeypatch
+):
     fake_server = FakeServer(build_number=13)
     monkeypatch.setattr(views, "server", fake_server)
     monkeypatch.setattr(views, "wait_and_get_build_status", lambda *_args: True)
-    monkeypatch.setattr(views.ServerProperties, "getWorkspaceLocation", staticmethod(lambda: "/workspace"))
+    monkeypatch.setattr(
+        views.ServerProperties,
+        "getWorkspaceLocation",
+        staticmethod(lambda: "/workspace"),
+    )
 
     response = auth_client.post(
         reverse("campusnetworkdelete"),
@@ -296,11 +340,17 @@ def test_delete_campus_network_view_deletes_network(auth_client, campus_network,
 
 
 @pytest.mark.django_db
-def test_delete_campus_network_view_reports_failure(auth_client, campus_network, monkeypatch):
+def test_delete_campus_network_view_reports_failure(
+    auth_client, campus_network, monkeypatch
+):
     fake_server = FakeServer(build_number=13)
     monkeypatch.setattr(views, "server", fake_server)
     monkeypatch.setattr(views, "wait_and_get_build_status", lambda *_args: False)
-    monkeypatch.setattr(views.ServerProperties, "getWorkspaceLocation", staticmethod(lambda: "/workspace"))
+    monkeypatch.setattr(
+        views.ServerProperties,
+        "getWorkspaceLocation",
+        staticmethod(lambda: "/workspace"),
+    )
 
     response = auth_client.post(
         reverse("campusnetworkdelete"),
@@ -313,7 +363,9 @@ def test_delete_campus_network_view_reports_failure(auth_client, campus_network,
 
 
 @pytest.mark.django_db
-def test_trigger_action_returns_failure_without_workbook(auth_client, action, campus_network):
+def test_trigger_action_returns_failure_without_workbook(
+    auth_client, action, campus_network
+):
     response = auth_client.get(
         reverse(
             "trigger_action_view",
@@ -358,8 +410,12 @@ def test_trigger_action_uses_expected_build_dir(
     monkeypatch.setattr(views, "server", fake_server)
     monkeypatch.setattr(views, "CrumbRequester", lambda *args, **kwargs: object())
     monkeypatch.setattr(views, "Jenkins", lambda *args, **kwargs: fake_job_runner)
-    monkeypatch.setattr(views, "create_workbook_from_db", lambda _campus_network_id: "/tmp/temp.xlsx")
-    monkeypatch.setattr(views, "create_new_inv", lambda _workbook_name: configuration_data)
+    monkeypatch.setattr(
+        views, "create_workbook_from_db", lambda _campus_network_id: "/tmp/temp.xlsx"
+    )
+    monkeypatch.setattr(
+        views, "create_new_inv", lambda _workbook_name: configuration_data
+    )
     monkeypatch.setattr(
         views,
         "updateCampusNetworkStatusOnDB",
@@ -377,8 +433,12 @@ def test_trigger_action_uses_expected_build_dir(
 
     assert response.status_code == 200
     assert response.json() == {"status": "success", "name": action.action_name}
-    assert fake_job_runner.job.calls[0]["build_params"]["build_dir"] == expected_build_dir
-    assert fake_job_runner.job.calls[0]["files"]["data.json"] == json.dumps(configuration_data)
+    assert (
+        fake_job_runner.job.calls[0]["build_params"]["build_dir"] == expected_build_dir
+    )
+    assert fake_job_runner.job.calls[0]["files"]["data.json"] == json.dumps(
+        configuration_data
+    )
     history = ActionHistory.objects.get()
     assert history.status == "Running"
     assert history.jenkins_job_build_no == 21
