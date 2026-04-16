@@ -2,7 +2,6 @@
 
 from .settings import *  # noqa: F401,F403
 
-
 # Use SQLite in CI to keep tests self-contained and avoid external DB setup.
 DATABASES = {
     "default": {
