@@ -1,0 +1,18 @@
+{
+  "env": {
+    "browser": true,
+    "jquery": true
+  },
+  "globals": {
+    "SlickGrid": "readonly",
+    "Slick": "readonly"
+  },
+  "rules": {
+    "no-unused-vars": "warn",
+    "no-undef": "warn",
+    "eqeqeq": "off",
+    "no-var": "off",
+    "prefer-const": "off",
+    "no-implicit-globals": "off"
+  }
+}
