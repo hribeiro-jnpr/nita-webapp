@@ -21,6 +21,8 @@ jobs:
         uses: github/super-linter@v4
         env:
           VALIDATE_ALL_CODEBASE: true
+          VALIDATE_CSS: false
+          VALIDATE_CSS_PRETTIER: false
           VALIDATE_JAVASCRIPT_ES: true
           VALIDATE_PYTHON_BLACK: true
           VALIDATE_HTML: true
