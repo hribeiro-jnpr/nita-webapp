@@ -59,7 +59,6 @@ JENKINS_SERVER_PASS = os.getenv("JENKINS_PASS", "admin")
 
 
 class NetworkTypeParser:
-
     def parseProjectFile(self, file_name):
         result = ""
         zip_validation = self.validateZipFile(file_name)
@@ -250,9 +249,9 @@ class NetworkTypeParser:
             if (archive_member_list[0].find(app_name + "/") != 0) and (
                 app_name not in archive_member_list
             ):
-                result["message"] = (
-                    "Zip file name and the project directory name should be same"
-                )
+                result[
+                    "message"
+                ] = "Zip file name and the project directory name should be same"
                 result["status"] = False
                 logger.error(result)
                 return result
