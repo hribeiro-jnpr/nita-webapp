@@ -45,10 +45,7 @@ jobs:
       - name: Validate Django project
         run: python manage.py check
 
-      - name: Run Django tests
-        run: python manage.py test
-
-      - name: Run pytest suite
+      - name: Run unified test suite (pytest)
         run: |
           cd ../../../
-          pytest -q
+          pytest -v

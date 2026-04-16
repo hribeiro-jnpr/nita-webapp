@@ -174,7 +174,7 @@ class NetworkTypeParser:
 
         projectfilename = find_file(tmp + "/tmp1/", "project.yaml")
         logger.debug("projectfilename = find_file('" + tmp + "/tmp1','project.yaml')")
-        logger.debug("projectfilename = " + projectfilename)
+        logger.debug("projectfilename = %s", projectfilename)
         if projectfilename is None:
             msg = "Can't find project.yaml file in: " + filename
             logger.error(msg)
@@ -189,13 +189,7 @@ class NetworkTypeParser:
             projectfile.close()
             projectname = projectdata["name"]
         except Exception as e:
-            msg = (
-                "Can't read project name from project.yaml file in: "
-                + filename
-                + "("
-                + e
-                + ")"
-            )
+            msg = f"Can't read project name from project.yaml file in: {filename} ({e})"
             logger.error(msg)
             # bomb out of this by returning the original filename because there are checks
             # later that will pick up project.yaml problems

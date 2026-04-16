@@ -35,6 +35,11 @@ def action_category(db):
 
 
 @pytest.fixture
+def build_action_category(db):
+    return ActionCategory.objects.create(category_name="BUILD")
+
+
+@pytest.fixture
 def action(db, campus_type, action_category):
     prop = ActionProperty.objects.create(
         shell_command="echo ok",
