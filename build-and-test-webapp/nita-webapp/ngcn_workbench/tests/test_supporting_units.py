@@ -143,10 +143,8 @@ def test_model_string_representations(
 
 @pytest.mark.django_db
 def test_campus_network_action_list_table_renders_suffixed_url(action):
-    table = CampusNetworkActionListTable(
-        Action.objects.filter(id=action.id),
-        "campus_one",
-    )
+    table = CampusNetworkActionListTable.__new__(CampusNetworkActionListTable)
+    table.network_name = "campus_one"
 
     assert table.render_jenkins_url(action.jenkins_url, action) == "job-test-campus_one"
 

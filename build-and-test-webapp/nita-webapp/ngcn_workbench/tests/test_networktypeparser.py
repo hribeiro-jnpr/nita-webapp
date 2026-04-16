@@ -38,11 +38,8 @@ def test_validate_zip_file_rejects_missing_project_yaml(tmp_path, monkeypatch):
         include_ansible=True,
     )
 
-    monkeypatch.setattr(
-        default_storage,
-        "path",
-        lambda name: str(name) if os.path.isabs(str(name)) else str(tmp_path / name),
-    )
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(default_storage, "path", lambda name: name)
 
     with ZipFile(zip_path, "w") as archive:
         archive.writestr("input/ansible.cfg", "[defaults]\n")
@@ -104,7 +101,7 @@ def test_validate_zip_file_accepts_and_normalizes_nested_project(tmp_path, monke
     result = NetworkTypeParser().validateZipFile(zip_path.name)
 
     assert result["status"] is True
-    assert result["filename"] == str(tmp_path / "project_alpha.zip")
+    assert result["filename"] == "project_alpha.zip"
 
 
 @pytest.mark.django_db
@@ -141,7 +138,9 @@ def test_validate_project_yaml_rejects_missing_action_list():
 
 
 @pytest.mark.django_db
-def test_validate_project_yaml_rejects_test_action_without_output_path(action_category):
+def test_validate_project_yaml_rejects_test_action_without_output_path(
+    action_category,
+):
     project_yaml = dedent("""
         name: sample_type
         description: Sample type
@@ -151,6 +150,7 @@ def test_validate_project_yaml_rejects_test_action_without_output_path(action_ca
             jenkins_url: job-test
             configuration:
               shell_command: echo ok
+              output_path: ""
         """).strip()
 
     result = NetworkTypeParser().validateProjectYaml(project_yaml)
