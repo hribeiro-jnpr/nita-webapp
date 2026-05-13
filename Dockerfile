@@ -12,7 +12,10 @@
 #
 # ********************************************************
 
-FROM python:3.8-slim-bullseye
+FROM python:3.13-slim-bookworm
+
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
 
 ENV WEBAPP_USER vagrant
 ENV WEBAPP_PASS vagrant123
@@ -21,15 +24,18 @@ ENV JENKINS_PASS admin
 
 WORKDIR /app
 
-RUN apt-get update -y
-RUN apt-get install gcc default-mysql-client default-libmysqlclient-dev wget unzip -y
+RUN apt-get update -y \
+	&& apt-get install -y --no-install-recommends \
+		gcc \
+		pkg-config \
+		default-mysql-client \
+		default-libmysqlclient-dev \
+	&& rm -rf /var/lib/apt/lists/*
 
-#COPY nita-yaml-to-excel/ yaml-to-excel/
-
-RUN wget --no-check-certificate https://github.com/Juniper/nita-yaml-to-excel/archive/refs/heads/22.8.zip
-RUN unzip 22.8.zip
+COPY nita-yaml-to-excel-22.8/ nita-yaml-to-excel-22.8/
 COPY requirements.txt .
-RUN pip install -r requirements.txt
+RUN pip install --no-cache-dir --upgrade pip \
+	&& pip install --no-cache-dir -r requirements.txt
 
 COPY nita.properties /etc/nita.properties
 
