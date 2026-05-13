@@ -24,6 +24,13 @@ logger = logging.getLogger(__name__)
 
 
 class StatusStartupServiceMiddleware(MiddlewareMixin):
+    def __init__(self, get_response=None):
+        self.get_response = get_response or (lambda request: None)
+        try:
+            super().__init__(self.get_response)
+        except TypeError:
+            super().__init__()
+
     def process_request(self, request):
         logger.info("Jenkins Job status updater service has been started")
         StatusUpdater.getInstance().startStatusUpdaterService()

@@ -69,12 +69,12 @@ class NetworkTypeParser:
         if zip_validation["status"]:
             try:
                 zip_file = ZipFile(default_storage.path(file_name), "r")
-                app_name = re.sub("\.zip$", "", file_name)
+                app_name = re.sub(r"\.zip$", "", file_name)
                 project_yaml_file = zip_file.read(app_name + "/project.yaml").decode(
                     "utf-8"
                 )
                 logger.debug(project_yaml_file)
-                yaml.load(project_yaml_file)
+                yaml.safe_load(project_yaml_file)
                 logger.debug("YAML Parsed Successfully")
                 zip_file.close()
                 validation_error = self.validateProjectYaml(project_yaml_file)
@@ -184,9 +184,8 @@ class NetworkTypeParser:
 
         try:
             logger.debug("open(" + projectfilename + ")")
-            projectfile = open(projectfilename)
-            projectdata = yaml.load(projectfile)
-            projectfile.close()
+            with open(projectfilename) as projectfile:
+                projectdata = yaml.safe_load(projectfile)
             projectname = projectdata["name"]
         except Exception as e:
             msg = f"Can't read project name from project.yaml file in: {filename} ({e})"
@@ -236,7 +235,7 @@ class NetworkTypeParser:
             file_name = self.normalizeZipFile(default_storage.path(file_name))
             zip_file = ZipFile(default_storage.path(file_name), "r")
             logger.error("Unzipping zipfile to: " + default_storage.path(file_name))
-            app_name = re.sub("\.zip$", "", file_name)
+            app_name = re.sub(r"\.zip$", "", file_name)
             logger.debug(app_name)
             archive_member_list = zip_file.namelist()
             logger.debug(archive_member_list)
@@ -282,7 +281,7 @@ class NetworkTypeParser:
     def validateProjectYaml(self, project_file):
         error_string = None
         campus_type_locale = _("network_type_heading")
-        project_file_dict = yaml.load(project_file)
+        project_file_dict = yaml.safe_load(project_file)
         try:
             campus_type_name = project_file_dict["name"]
             if not campus_type_name or campus_type_name.isspace():
@@ -375,7 +374,7 @@ class NetworkTypeParser:
         try:
             with transaction.atomic():
                 logger.info(project_file)
-                project_file_dict = yaml.load(project_file)
+                project_file_dict = yaml.safe_load(project_file)
                 logger.info(project_file_dict)
                 campus_type = CampusType(
                     name=project_file_dict["name"].strip(),
