@@ -30,7 +30,8 @@ RUN apt-get update -y \
 		pkg-config \
 		default-mysql-client \
 		default-libmysqlclient-dev \
-        wget\
+		wget\
+		unzip\
 	&& rm -rf /var/lib/apt/lists/*
 
 #COPY nita-yaml-to-excel/ yaml-to-excel/
