@@ -32,7 +32,10 @@ RUN apt-get update -y \
 		default-libmysqlclient-dev \
 	&& rm -rf /var/lib/apt/lists/*
 
-COPY nita-yaml-to-excel-22.8/ nita-yaml-to-excel-22.8/
+#COPY nita-yaml-to-excel/ yaml-to-excel/
+RUN wget --no-check-certificate https://github.com/Juniper/nita-yaml-to-excel/archive/refs/heads/22.8.zip
+RUN unzip 22.8.zip
+
 COPY requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip \
 	&& pip install --no-cache-dir -r requirements.txt
