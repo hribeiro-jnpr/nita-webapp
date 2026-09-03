@@ -79,6 +79,33 @@ and suppresses the loading indicator when data is already present.
 same operation on a timer, so it inherits the same rule. Anything else would
 flash the table every 15 s.
 
+**Amendment made during implementation**: `fetchHistory` also called
+`setRobotSummaries({})` before re-fetching the Robot Framework summaries. On a
+tab re-entry that reset is invisible, because the table is being re-rendered
+anyway. On a 15-second poll it is not: every displayed test result would blank
+out and then reappear as each summary request resolved — a flash on a cadence,
+which is exactly what this decision forbids. The reset was therefore removed and
+summaries are now **merged** into the existing map. Stale entries for rows that
+disappear are harmless, since summaries are only read for rows currently
+rendered. This was the one change to `fetchHistory` beyond adding cancellation;
+task 2.3's "verify, do not change" refers to the loading indicator, which was
+verified unchanged.
+
+### Decision 3a: Cancellation is per-fetch, latest-wins
+
+**Choice**: `fetchHistory` owns an `AbortController` in a ref. Each call aborts
+the previous request before starting its own, and the tab effect's cleanup
+aborts on tab change and unmount. Error and loading state are only written when
+the signal was not aborted.
+
+**Rationale**: Polling makes overlapping requests possible for the first time —
+a slow response can still be in flight when the next interval fires, and without
+latest-wins ordering a stale response could overwrite fresher rows. Guarding the
+`catch` on `signal.aborted` also prevents a cancelled request from rendering
+"Failed to load history", which is what a naive abort would produce on every tab
+change. The Robot summary sub-requests share the same signal, so leaving the tab
+cancels the whole fan-out rather than letting it resolve into an unmounted page.
+
 ### Decision 4: Extract a reusable hook
 
 **Choice**: A small hook — something like
