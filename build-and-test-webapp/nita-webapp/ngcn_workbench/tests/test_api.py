@@ -74,7 +74,10 @@ def _mock_jenkins_build(monkeypatch, success):
     import ngcn.jenkins_jobs as jenkins_jobs
     import ngcn.utils as ngcn_utils
 
-    def _fake_invoke(job_name, build_params=None, files=None):
+    calls = []
+
+    def _fake_invoke(job_name, build_params=None, files=None, *, cause):
+        calls.append({"job_name": job_name, "cause": cause})
         if not success:
             raise Exception("Jenkins service unavailable")
         return 1
@@ -85,6 +88,7 @@ def _mock_jenkins_build(monkeypatch, success):
         "getWorkspaceLocation",
         staticmethod(lambda: "/tmp/workspace"),
     )
+    return calls
 
 
 # ── Fixtures ───────────────────────────────────────────────────────────────────
@@ -200,10 +204,14 @@ def test_network_type_upload_returns_parser_result(api_client, monkeypatch):
     from django.http import JsonResponse
 
     monkeypatch.setattr(django_storage, "default_storage", _FakeStorage())
+    actors = []
     monkeypatch.setattr(
         api_views.NetworkTypeParser,
         "parseProjectFile",
-        lambda self, name: JsonResponse({"result": "success", "name": "mytype"}),
+        lambda self, name, *, initiated_by: (
+            actors.append(initiated_by)
+            or JsonResponse({"result": "success", "name": "mytype"})
+        ),
     )
 
     response = api_client.post(
@@ -214,6 +222,7 @@ def test_network_type_upload_returns_parser_result(api_client, monkeypatch):
     assert response.status_code == 200
     assert response.json()["result"] == "success"
     assert response.json()["name"] == "mytype"
+    assert actors == ["tester"]
 
 
 @pytest.mark.django_db
@@ -244,7 +253,7 @@ def test_network_retrieve_includes_campus_type_name(api_client, campus_network):
 
 @pytest.mark.django_db
 def test_network_create(api_client, campus_type, monkeypatch):
-    _mock_jenkins_build(monkeypatch, success=True)
+    calls = _mock_jenkins_build(monkeypatch, success=True)
     response = api_client.post(
         "/api/v1/networks/",
         {
@@ -257,6 +266,9 @@ def test_network_create(api_client, campus_type, monkeypatch):
     )
     assert response.status_code == 201
     assert CampusNetwork.objects.filter(name="new-net").exists()
+    assert calls == [
+        {"job_name": "network_template_mgr", "cause": "Started by tester via NITA"}
+    ]
 
 
 @pytest.mark.django_db
@@ -291,10 +303,13 @@ def test_network_partial_update(api_client, campus_network):
 
 @pytest.mark.django_db
 def test_network_delete(api_client, campus_network, monkeypatch):
-    _mock_jenkins_build(monkeypatch, success=True)
+    calls = _mock_jenkins_build(monkeypatch, success=True)
     response = api_client.delete(f"/api/v1/networks/{campus_network.id}/")
     assert response.status_code == 202
     assert not CampusNetwork.objects.filter(id=campus_network.id).exists()
+    assert calls == [
+        {"job_name": "network_template_mgr", "cause": "Started by tester via NITA"}
+    ]
 
 
 @pytest.mark.django_db

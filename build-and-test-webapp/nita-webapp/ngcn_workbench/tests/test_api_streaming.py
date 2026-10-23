@@ -3,6 +3,7 @@
 
 """Tests for the SSE streaming endpoint GET /api/v1/action-history/{id}/stream/."""
 
+import base64
 import urllib.error
 from unittest.mock import patch
 
@@ -111,3 +112,36 @@ def test_generator_emits_done_when_no_more_data():
     done_events = [e for e in events if e.startswith("event: done")]
     assert len(data_events) == 2
     assert len(done_events) == 1
+
+
+def test_progressive_text_request_uses_basic_auth(monkeypatch):
+    from unittest.mock import MagicMock
+
+    from ngcn import jenkins_config
+    from ngcn.jenkins_jobs import progressive_text_events
+
+    monkeypatch.setattr(jenkins_config, "JENKINS_SERVER_URL", "http://jenkins:8080/jenkins")
+    monkeypatch.setattr(jenkins_config, "JENKINS_SERVER_USER", "service-user")
+    monkeypatch.setattr(jenkins_config, "JENKINS_SERVER_PASS", "service-pass")
+    monkeypatch.setattr("ngcn.jenkins_jobs.time.sleep", lambda _seconds: None)
+
+    response = MagicMock()
+    response.read.return_value = b"authenticated output\n"
+    response.headers.get.side_effect = lambda key, default=None: {
+        "X-More-Data": "false",
+        "X-Text-Size": "22",
+    }.get(key, default)
+    response.__enter__ = lambda _self: response
+    response.__exit__ = MagicMock(return_value=False)
+    requests = []
+
+    def fake_urlopen(request, timeout):
+        requests.append(request)
+        return response
+
+    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+    events = list(progressive_text_events("job-test", 1))
+
+    expected = "Basic " + base64.b64encode(b"service-user:service-pass").decode()
+    assert requests[0].get_header("Authorization") == expected
+    assert events[-1] == "event: done\ndata: \n\n"

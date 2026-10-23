@@ -221,3 +221,60 @@ def test_update_network_type_details_on_db_creates_actions(
     assert build_action.action_property.custom_workspace == ""
 
     assert ActionProperty.objects.count() == 2
+
+
+@pytest.mark.django_db
+def test_parse_project_file_passes_initiating_user_as_job_cause(
+    tmp_path, monkeypatch
+):
+    import ngcn.jenkins_jobs as jenkins_jobs
+    import ngcn.networktypeparser as networktypeparser
+    import ngcn.utils as ngcn_utils
+    from django.http import JsonResponse
+
+    project_yaml = "name: sample_type\ndescription: Sample type\naction: []\n"
+    archive_path = tmp_path / "sample_type.zip"
+    with ZipFile(archive_path, "w") as archive:
+        archive.writestr("sample_type/project.yaml", project_yaml)
+
+    parser = NetworkTypeParser()
+    monkeypatch.setattr(
+        parser,
+        "validateZipFile",
+        lambda _filename: {"status": True, "filename": "sample_type.zip"},
+    )
+    monkeypatch.setattr(parser, "validateProjectYaml", lambda _yaml: None)
+    monkeypatch.setattr(default_storage, "path", lambda _filename: str(archive_path))
+    monkeypatch.setattr(
+        ngcn_utils.ServerProperties,
+        "getWorkspaceLocation",
+        staticmethod(lambda: "/tmp/workspace"),
+    )
+    monkeypatch.setattr(
+        parser,
+        "updateNetworkTypeDetailsOnDB",
+        lambda _yaml, _filename: True,
+    )
+
+    class FakeJenkins:
+        def get_job_config(self, _job_name):
+            return "<project><customWorkspace>/old</customWorkspace></project>"
+
+        def reconfig_job(self, _job_name, _xml):
+            pass
+
+    monkeypatch.setattr(networktypeparser.jenkins, "Jenkins", lambda *a, **kw: FakeJenkins())
+    causes = []
+    monkeypatch.setattr(
+        jenkins_jobs,
+        "invoke_job",
+        lambda job_name, build_params=None, files=None, *, cause: (
+            causes.append(cause) or 42
+        ),
+    )
+
+    response = parser.parseProjectFile("sample_type.zip", initiated_by="carol")
+
+    assert isinstance(response, JsonResponse)
+    assert response.status_code == 202
+    assert causes == ["Started by carol via NITA"]

@@ -20,13 +20,19 @@ User = get_user_model()
 
 
 class _FakeJob:
+    def __init__(self):
+        self.calls = []
+
     def invoke(self, **kwargs):
-        pass
+        self.calls.append(kwargs)
 
 
 class _FakeJenkinsClient:
     def __init__(self, *args, **kwargs):
         self.job = _FakeJob()
+        self.__class__.instances.append(self)
+
+    instances = []
 
     def get_job(self, job_name):
         return self.job
@@ -92,6 +98,9 @@ def _trigger(user, network, action, monkeypatch):
     Workbook.objects.get_or_create(name="wb", campus_network_id=network)
     resp = _client(user).post(f"/api/v1/networks/{network.id}/trigger/{action.id}/")
     assert resp.status_code == 202
+    assert _FakeJenkinsClient.instances[-1].job.calls[-1]["cause"] == (
+        f"Started by {user.username} via NITA"
+    )
     return ActionHistory.objects.get(id=resp.json()["action_history_id"])
 
 

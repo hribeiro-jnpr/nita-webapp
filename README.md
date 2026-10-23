@@ -14,6 +14,11 @@ policies.
 
 Please refer to the [README][readme] for more details.
 
+The Jenkins UI now requires an authenticated webapp session and redirects
+unauthenticated visitors through login back to the requested Jenkins page. The
+webapp also authenticates its Jenkins console-stream requests, and builds
+record the username of the webapp user who initiated them.
+
 # Installing
 
 The simplest way to install the nita-webapp is by installing nita, which can be done by running the ``install.sh`` script located and in the parent [nita repo][branch] as described [here][readme].

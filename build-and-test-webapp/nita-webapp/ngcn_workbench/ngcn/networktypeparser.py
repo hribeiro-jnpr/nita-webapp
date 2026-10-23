@@ -42,7 +42,7 @@ config.read_file(open(config_location + "server_details.ini"))
 
 
 class NetworkTypeParser:
-    def parseProjectFile(self, file_name):
+    def parseProjectFile(self, file_name, *, initiated_by):
         result = ""
         zip_validation = self.validateZipFile(file_name)
         # update the filename based on normalization in the validation step
@@ -95,6 +95,7 @@ class NetworkTypeParser:
                                 "operation": "add",
                             },
                             files={"app.zip": app_zip_file},
+                            cause=f"Started by {initiated_by} via NITA",
                         )
                 except Exception as exc:
                     logger.error("Jenkins unreachable during network type load")

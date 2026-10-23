@@ -27,6 +27,18 @@ logger = logging.getLogger(__name__)
 _ANSI_ESCAPE = re.compile(r"(?:\x1B[@-_]|[\x80-\x9F])[0-?]*[ -/]*[@-~]")
 
 
+def _basic_auth_header():
+    """Return the configured Jenkins Basic Authorization header value."""
+    import base64
+
+    from ngcn.jenkins_config import JENKINS_SERVER_PASS, JENKINS_SERVER_USER
+
+    token = base64.b64encode(
+        f"{JENKINS_SERVER_USER}:{JENKINS_SERVER_PASS}".encode()
+    ).decode()
+    return "Basic " + token
+
+
 def robot_summary(job_name, build_no):
     """Return normalized Robot Framework result totals for a build, or ``None``.
 
@@ -35,21 +47,13 @@ def robot_summary(job_name, build_no):
     ``passed``, ``failed``, ``skipped`` and ``pass_percentage`` keys, or ``None``
     when the build has no Robot results or Jenkins is unreachable.
     """
-    import base64
     import json
 
-    from ngcn.jenkins_config import (
-        JENKINS_SERVER_PASS,
-        JENKINS_SERVER_URL,
-        JENKINS_SERVER_USER,
-    )
+    from ngcn.jenkins_config import JENKINS_SERVER_URL
 
     url = f"{JENKINS_SERVER_URL}/job/{job_name}/{build_no}/robot/api/json"
     req = urllib.request.Request(url)
-    token = base64.b64encode(
-        f"{JENKINS_SERVER_USER}:{JENKINS_SERVER_PASS}".encode()
-    ).decode()
-    req.add_header("Authorization", "Basic " + token)
+    req.add_header("Authorization", _basic_auth_header())
     try:
         with urllib.request.urlopen(req, timeout=15) as resp:  # noqa: S310
             data = json.loads(resp.read().decode("utf-8", errors="replace"))
@@ -99,7 +103,7 @@ def _make_crumbed_jenkins():
     )
 
 
-def invoke_job(job_name, build_params=None, files=None):
+def invoke_job(job_name, build_params=None, files=None, *, cause):
     """Invoke a Jenkins job with an authenticated crumb and return its build no.
 
     Reserves the job's ``nextBuildNumber`` (the number the started build will
@@ -110,6 +114,7 @@ def invoke_job(job_name, build_params=None, files=None):
     :param job_name: the Jenkins job name to invoke.
     :param build_params: optional dict of build parameters.
     :param files: optional dict of files to upload (e.g. ``{"app.zip": fh}``).
+    :param cause: Jenkins build cause describing the initiating webapp user.
     :returns: the reserved build number for this invocation.
     """
     from ngcn.jenkins_config import _make_jenkins_server
@@ -123,6 +128,7 @@ def invoke_job(job_name, build_params=None, files=None):
             kwargs["build_params"] = build_params
         if files is not None:
             kwargs["files"] = files
+        kwargs["cause"] = cause
         _make_crumbed_jenkins().get_job(job_name).invoke(**kwargs)
 
     try:
@@ -164,6 +170,7 @@ def progressive_text_events(job_name, build_no):
         try:
             url = f"{base_url}?start={offset}"
             req = urllib.request.Request(url)
+            req.add_header("Authorization", _basic_auth_header())
             with urllib.request.urlopen(req, timeout=10) as resp:  # noqa: S310
                 chunk = resp.read().decode("utf-8", errors="replace")
                 more_data = resp.headers.get("X-More-Data", "false").lower() == "true"

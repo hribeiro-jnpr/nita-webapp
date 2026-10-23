@@ -44,7 +44,12 @@ from drf_spectacular.utils import (
     extend_schema_view,
 )
 from rest_framework import mixins, status, viewsets
-from rest_framework.decorators import action, api_view, permission_classes
+from rest_framework.decorators import (
+    action,
+    api_view,
+    authentication_classes,
+    permission_classes,
+)
 from rest_framework.parsers import MultiPartParser
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.renderers import BaseRenderer
@@ -81,6 +86,7 @@ from ngcn.workbook import (
     parse_workbook,
 )
 
+from .authentication import LabSessionAuthentication
 from .permissions import (
     IsAdminOrManagesNonAdminUser,
     IsAdminRole,
@@ -205,6 +211,21 @@ def me_view(request):
             "teams": list(user.teams.values_list("id", flat=True)),
         }
     )
+
+
+@extend_schema(
+    responses={200: OpenApiResponse(description="Session authorized for proxy access")},
+    summary="Authorize a reverse-proxy request using the webapp session",
+)
+@api_view(["GET"])
+@authentication_classes([LabSessionAuthentication])
+@permission_classes([IsAuthenticated])
+def forward_auth_view(request):
+    """Authorize the proxy using a webapp session and return caller headers."""
+    response = Response(status=status.HTTP_200_OK)
+    response["X-Auth-User"] = request.user.get_username()
+    response["X-Auth-Role"] = getattr(request.user, "role", "") or ""
+    return response
 
 
 @extend_schema(
@@ -415,7 +436,10 @@ class CampusTypeViewSet(
         file_name = default_storage.save(zip_file.name, zip_file)
         zip_file.close()
         parser = NetworkTypeParser()
-        result = parser.parseProjectFile(file_name)
+        result = parser.parseProjectFile(
+            file_name,
+            initiated_by=request.user.username,
+        )
         default_storage.delete(file_name)
         if hasattr(result, "status_code"):
             # NetworkTypeParser returns a JsonResponse on success/failure
@@ -517,7 +541,11 @@ class CampusNetworkViewSet(viewsets.ModelViewSet):
         }
 
         try:
-            build_no = jenkins_jobs.invoke_job(action_url, build_params=build_params)
+            build_no = jenkins_jobs.invoke_job(
+                action_url,
+                build_params=build_params,
+                cause=f"Started by {request.user.username} via NITA",
+            )
         except Exception as exc:
             logger.error(
                 "Jenkins unreachable while creating network %s: %s",
@@ -567,7 +595,11 @@ class CampusNetworkViewSet(viewsets.ModelViewSet):
         }
 
         try:
-            build_no = jenkins_jobs.invoke_job(action_url, build_params=build_params)
+            build_no = jenkins_jobs.invoke_job(
+                action_url,
+                build_params=build_params,
+                cause=f"Started by {request.user.username} via NITA",
+            )
         except Exception as exc:
             logger.error(
                 "Jenkins unreachable while deleting network %s: %s",
@@ -833,6 +865,7 @@ class CampusNetworkViewSet(viewsets.ModelViewSet):
                     action_url,
                     build_params={"build_dir": build_dir},
                     files={"data.json": json.dumps(configuration_data)},
+                    cause=f"Started by {request.user.username} via NITA",
                 )
             except Exception as exc:
                 logger.error(
