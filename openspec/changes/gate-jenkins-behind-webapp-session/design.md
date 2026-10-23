@@ -60,10 +60,12 @@ Constraints:
 
 ### Decision 1: The auth contract is a Django endpoint, not proxy config
 
-**Choice:** `GET /api/v1/auth/forward/`. Session-authenticated. `200` + empty
-body on success with `X-Auth-User: <username>` and `X-Auth-Role: <role>`
-response headers. DRF's default behaviour for an unauthenticated session
-request (`403`) is left as-is.
+**Choice:** `GET /api/v1/auth/forward/` uses `LabSessionAuthentication` only,
+with `IsAuthenticated`. It returns `200` + an empty body on success with
+`X-Auth-User: <username>` and `X-Auth-Role: <role>` response headers. It does
+not use the global authentication-class list, which also enables
+`TokenAuthentication`; a token without a webapp session must be denied. DRF's
+default behaviour for an unauthenticated session request (`403`) is left as-is.
 
 **Rationale:** nginx `auth_request` and Traefik `forwardAuth` both consume
 exactly this shape — "2xx means forward, anything else means deny, optionally
@@ -137,8 +139,10 @@ ANSI stripping, timeouts, 404-while-queued tolerance — is untouched.
 ### Decision 6: Cause text is fixed-format and derived from the request user
 
 **Choice:** `invoke_job(..., cause=f"Started by {username} via NITA")`, where
-`username` is `request.user.username`. All three callers (action trigger,
-network create, network delete) pass it.
+`username` is the initiating webapp user's username. All four user-triggered
+callers pass it: action trigger, network create, network delete, and
+network-type validation. The upload view passes `request.user.username` to
+`NetworkTypeParser.parseProjectFile`, which forwards it to `invoke_job`.
 
 **Rationale:** Jenkins stores a free-text cause and shows it on the build page
 and in the API (`actions[].causes[].shortDescription`). A stable prefix makes
@@ -166,12 +170,15 @@ it gives operators an audit trail today at zero infrastructure cost.
 
 ## Migration Plan
 
-1. Merge and deploy this change. It is additive (new endpoint, extra request
-   header, gated route) and does not depend on the companion changes to be
-   correct.
-2. Deploy `nita/close-jenkins-direct-exposure` so the host-port bypass is
-   gone and the proxy pod is permitted to reach Jenkins.
-3. Deploy `nita-jenkins/revoke-anonymous-build-and-enable-csrf`.
+1. Deploy `nita-jenkins/revoke-anonymous-build-and-enable-csrf`; verify that
+  authenticated build clients still work and anonymous build/cancel requests
+  are rejected.
+2. Deploy `nita/close-jenkins-direct-exposure`; verify the direct host port is
+  closed and the proxy can reach Jenkins on 8080 before enabling the gate.
+3. Deploy this change and verify logged-in Jenkins UI access and anonymous
+  redirect-to-login behavior. Keep the interval before this step short because
+  Jenkins remains anonymously readable through the proxy, though build and
+  cancel permissions have already been removed.
 
 Rollback for this change is removing the `auth_request` line from
 `location /jenkins/`; the Django endpoint and the extra header are harmless

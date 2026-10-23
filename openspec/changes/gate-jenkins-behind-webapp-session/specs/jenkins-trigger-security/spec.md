@@ -5,15 +5,19 @@ The Django application SHALL communicate with the internal Jenkins service using
 authenticated requests — a username and password (`JENKINS_SERVER_USER` /
 `JENKINS_SERVER_PASS`) — and SHALL supply a CSRF crumb for build requests via a
 `CrumbRequester`. This applies to **every** Django→Jenkins HTTP path without
-exception: triggering an action, the network create/delete jobs, build-status
-polling, lifecycle history, the Robot Framework summary relay, and the
-progressive console text used by the SSE stream. The Django application SHALL
-NOT depend on Jenkins granting any permission to the `anonymous` user. The
+exception: action triggers, network create/delete jobs, network-type
+validation, build-status polling, lifecycle history, the Robot Framework
+summary relay, and the progressive console text used by the SSE stream. The
+Django application SHALL NOT depend on Jenkins granting any permission to the
+`anonymous` user. The
 internal base URL SHALL target the Jenkins service under its `/jenkins` context
 path (e.g. `http://jenkins:8080/jenkins`).
 
-All Jenkins communication SHALL still originate from the Django application container to the
-internal Jenkins service, never from the client browser directly.
+All Django-initiated Jenkins API and job-operation requests SHALL originate
+from the Django application container to the internal Jenkins service. Browser
+access to the Jenkins UI SHALL use only the session-gated reverse proxy; the
+browser SHALL NOT connect to the internal Jenkins service directly or receive
+Jenkins credentials.
 
 #### Scenario: Trigger uses authenticated Jenkins client with a crumb
 - GIVEN a valid NITA session and configured Jenkins credentials
@@ -54,7 +58,8 @@ internal Jenkins service, never from the client browser directly.
 Every Jenkins build invoked by the Django application on behalf of a user SHALL
 be submitted with a build cause of the form `Started by <username> via NITA`,
 where `<username>` is the authenticated webapp user who made the request. This
-applies to action triggers and to the network create and delete jobs.
+applies to action triggers, network create/delete jobs, and network-type
+validation builds.
 
 #### Scenario: Action trigger records the cause
 - GIVEN user `alice` triggers an action on a network
@@ -66,3 +71,8 @@ applies to action triggers and to the network create and delete jobs.
 - GIVEN user `bob` creates a network
 - WHEN the `network_template_mgr` build is invoked
 - THEN the build's cause is `Started by bob via NITA`
+
+#### Scenario: Network-type validation records the cause
+- GIVEN user `carol` uploads a network type for validation
+- WHEN the `network_type_validator` build is invoked
+- THEN the build's cause is `Started by carol via NITA`

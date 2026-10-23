@@ -3,7 +3,8 @@
 ### Requirement: Forward-Auth Endpoint for Reverse Proxies
 The system SHALL expose `GET /api/v1/auth/forward/` for reverse-proxy
 authentication sub-requests (nginx `auth_request`, Traefik `forwardAuth`). It
-SHALL authenticate by webapp session only, answer `200` with an empty body and
+SHALL use `LabSessionAuthentication` only (not the global authentication
+classes), answer `200` with an empty body and
 `X-Auth-User` / `X-Auth-Role` response headers for an authenticated caller, and
 answer `401` or `403` with neither header otherwise. It SHALL NOT write to the
 database.

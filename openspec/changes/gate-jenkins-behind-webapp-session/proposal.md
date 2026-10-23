@@ -30,8 +30,9 @@ Two facts shape the design:
 
 ## What Changes
 
-- **Forward-auth endpoint.** A new `GET /api/v1/auth/forward/` that answers
-  `200` with an empty body for a request carrying a valid webapp session and
+- **Forward-auth endpoint.** A new `GET /api/v1/auth/forward/` using
+  `LabSessionAuthentication` only, answering `200` with an empty body for a
+  request carrying a valid webapp session and
   `401`/`403` otherwise. On success it also sets `X-Auth-User` and
   `X-Auth-Role` response headers describing the caller. This is the contract a
   reverse proxy consults before forwarding a request to Jenkins; it is
@@ -46,9 +47,10 @@ Two facts shape the design:
 - **The SSE console stream authenticates to Jenkins.** `progressive_text_events`
   sends the same Basic `Authorization` header `robot_summary` already sends.
   No API shape change; the stream behaves identically from the SPA's view.
-- **Builds record who asked for them.** Every `invoke_job` call passes a Jenkins
-  build *cause* of the form `Started by <username> via NITA`, so Jenkins build
-  pages name the webapp user instead of only the service account.
+- **Builds record who asked for them.** All four user-triggered `invoke_job`
+  paths pass a Jenkins build *cause* of the form `Started by <username> via
+  NITA`, including network-type validation, so Jenkins build pages name the
+  webapp user instead of only the service account.
 
 ## Capabilities
 
@@ -66,9 +68,10 @@ Two facts shape the design:
 ## Impact
 
 - **Backend:** one new view and URL; one header added in `jenkins_jobs.py`;
-  one `cause=` keyword threaded through `invoke_job` and its three callers
-  (action trigger, network create, network delete). `openapi.yaml` is
-  regenerated for the new endpoint.
+  one `cause=` keyword threaded through `invoke_job` and its four callers
+  (action trigger, network create, network delete, and network-type
+  validation). The upload view passes the acting username into
+  `NetworkTypeParser`. `openapi.yaml` is regenerated for the new endpoint.
 - **Frontend:** `LoginPage` reads and validates `next`. No new dependencies.
 - **Proxy:** `nginx/nginx.conf` gains an internal auth location, an
   `auth_request` directive in `location /jenkins/`, and a named location for
@@ -83,6 +86,7 @@ Two facts shape the design:
   `nita-jenkins/revoke-anonymous-build-and-enable-csrf` removes the anonymous
   grants and re-enables CSRF; `nita/close-jenkins-direct-exposure` removes the
   host-port 8443 bypass and fixes the NetworkPolicy so the proxy pod may reach
-  Jenkins. Without the `nita` change the gate can be walked around; without
-  the `nita-jenkins` change in-cluster callers can still build anonymously.
-  This change is safe to merge first: it only *adds* credentials and a gate.
+  Jenkins. Deploy Jenkins hardening first, the NITA networking change second,
+  and this session gate last. Until the gate is deployed, anonymous reads
+  remain possible through the proxy, but anonymous build/cancel access has
+  already been removed and the direct host-port route is closed.

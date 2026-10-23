@@ -1,8 +1,13 @@
 ## 1. Forward-auth endpoint
 
-- [ ] 1.1 Add `forward_auth_view` (`GET /api/v1/auth/forward/`): `IsAuthenticated`, returns `200` with empty body and `X-Auth-User` / `X-Auth-Role` response headers; document with `extend_schema`
+- [ ] 1.1 Add `forward_auth_view` (`GET /api/v1/auth/forward/`) with
+      `IsAuthenticated` and `LabSessionAuthentication` only; return `200` with
+      an empty body and `X-Auth-User` / `X-Auth-Role` headers; document with
+      `extend_schema`
 - [ ] 1.2 Register the route in `ngcn/api/urls.py` alongside the other `auth/` routes
-- [ ] 1.3 Tests: authenticated session → 200 + both headers; no session → 401/403 and no identity headers; token auth is not accepted (session-only)
+- [ ] 1.3 Tests: authenticated session → 200 + both headers; no session →
+      401/403 and no identity headers; valid token without session is denied
+      despite global `TokenAuthentication` being enabled
 - [ ] 1.4 Regenerate `openapi.yaml` and confirm `test_openapi_drift.py` passes
 
 ## 2. nginx gate
@@ -27,8 +32,11 @@
 ## 5. Build cause
 
 - [ ] 5.1 Add a `cause` keyword to `invoke_job` and pass it through to `jenkinsapi` `Job.invoke`
-- [ ] 5.2 Action trigger, network create and network delete pass `cause=f"Started by {request.user.username} via NITA"`
-- [ ] 5.3 Tests: `invoke_job` forwards `cause`; the trigger view passes the acting user's name (extend the existing mocked-Jenkins tests in `test_api.py`)
+- [ ] 5.2 Action trigger, network create/delete, and network-type validation
+      pass `cause=f"Started by {username} via NITA"`; the upload view passes
+      `request.user.username` through `NetworkTypeParser`
+- [ ] 5.3 Tests: `invoke_job` forwards `cause`; all four caller paths pass the
+      acting user's name, including network-type upload and validation
 
 ## 6. Validation
 
