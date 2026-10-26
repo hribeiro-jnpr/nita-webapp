@@ -544,7 +544,7 @@ class CampusNetworkViewSet(viewsets.ModelViewSet):
             build_no = jenkins_jobs.invoke_job(
                 action_url,
                 build_params=build_params,
-                cause=f"Started by {request.user.username} via NITA",
+                initiated_by=request.user.username,
             )
         except Exception as exc:
             logger.error(
@@ -598,7 +598,7 @@ class CampusNetworkViewSet(viewsets.ModelViewSet):
             build_no = jenkins_jobs.invoke_job(
                 action_url,
                 build_params=build_params,
-                cause=f"Started by {request.user.username} via NITA",
+                initiated_by=request.user.username,
             )
         except Exception as exc:
             logger.error(
@@ -865,7 +865,7 @@ class CampusNetworkViewSet(viewsets.ModelViewSet):
                     action_url,
                     build_params={"build_dir": build_dir},
                     files={"data.json": json.dumps(configuration_data)},
-                    cause=f"Started by {request.user.username} via NITA",
+                    initiated_by=request.user.username,
                 )
             except Exception as exc:
                 logger.error(

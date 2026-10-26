@@ -13,7 +13,6 @@ import traceback
 from xml.dom.minidom import parseString
 from zipfile import ZipFile
 
-import jenkins
 import yaml
 from django.conf import settings
 from django.core.files.storage import default_storage
@@ -21,11 +20,7 @@ from django.db import transaction
 from django.http import JsonResponse
 from django.utils.translation import gettext as _
 
-from ngcn.jenkins_config import (
-    JENKINS_SERVER_PASS,
-    JENKINS_SERVER_URL,
-    JENKINS_SERVER_USER,
-)
+from ngcn.jenkins_config import JENKINS_SERVER_URL, _make_jenkins_server
 from ngcn.models import Action, ActionCategory, ActionProperty, CampusType
 
 # from ngcn.models import JenkinsJobProperty
@@ -67,12 +62,7 @@ class NetworkTypeParser:
                     )
 
                 job_name = "network_type_validator"
-                # Intentionally imported here rather than at module level.
-                server = jenkins.Jenkins(
-                    JENKINS_SERVER_URL,
-                    username=JENKINS_SERVER_USER,
-                    password=JENKINS_SERVER_PASS,
-                )
+                server = _make_jenkins_server()
                 logger.debug("Jenkins server: " + JENKINS_SERVER_URL)
                 tree = parseString(server.get_job_config(job_name))
                 logger.debug("Job xml: " + tree.toxml())
@@ -95,7 +85,7 @@ class NetworkTypeParser:
                                 "operation": "add",
                             },
                             files={"app.zip": app_zip_file},
-                            cause=f"Started by {initiated_by} via NITA",
+                            initiated_by=initiated_by,
                         )
                 except Exception as exc:
                     logger.error("Jenkins unreachable during network type load")

@@ -224,9 +224,7 @@ def test_update_network_type_details_on_db_creates_actions(
 
 
 @pytest.mark.django_db
-def test_parse_project_file_passes_initiating_user_as_job_cause(
-    tmp_path, monkeypatch
-):
+def test_parse_project_file_invokes_job_as_initiating_user(tmp_path, monkeypatch):
     import ngcn.jenkins_jobs as jenkins_jobs
     import ngcn.networktypeparser as networktypeparser
     import ngcn.utils as ngcn_utils
@@ -263,13 +261,15 @@ def test_parse_project_file_passes_initiating_user_as_job_cause(
         def reconfig_job(self, _job_name, _xml):
             pass
 
-    monkeypatch.setattr(networktypeparser.jenkins, "Jenkins", lambda *a, **kw: FakeJenkins())
-    causes = []
+    monkeypatch.setattr(
+        networktypeparser, "_make_jenkins_server", lambda acting_user=None: FakeJenkins()
+    )
+    initiators = []
     monkeypatch.setattr(
         jenkins_jobs,
         "invoke_job",
-        lambda job_name, build_params=None, files=None, *, cause: (
-            causes.append(cause) or 42
+        lambda job_name, build_params=None, files=None, *, initiated_by: (
+            initiators.append(initiated_by) or 42
         ),
     )
 
@@ -277,4 +277,4 @@ def test_parse_project_file_passes_initiating_user_as_job_cause(
 
     assert isinstance(response, JsonResponse)
     assert response.status_code == 202
-    assert causes == ["Started by carol via NITA"]
+    assert initiators == ["carol"]

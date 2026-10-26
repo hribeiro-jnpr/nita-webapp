@@ -21,8 +21,9 @@ Relevant existing pieces:
 - `jenkins_jobs.robot_summary` already builds a Basic `Authorization` header
   from the configured credentials. `progressive_text_events` in the same module
   does not; it is the only Django→Jenkins HTTP call without one.
-- `jenkins_jobs.invoke_job` wraps `jenkinsapi`'s `Job.invoke`, which accepts a
-  `cause` keyword that Jenkins records as the build's cause.
+- `jenkins_jobs.invoke_job` wraps `jenkinsapi`'s `Job.invoke`. Its `cause`
+  keyword is sent as a build *parameter* and only becomes a Jenkins cause when
+  a job build-token is used; it does not attribute the build to a user.
 - `LoginPage` navigates to `/` unconditionally after login.
 - `nginx/nginx.conf` is the single proxy config; `nita/install.sh` downloads it
   from this repo and publishes it as a ConfigMap, so there is one place to
@@ -54,7 +55,8 @@ Constraints:
 - Changing the Jenkins-side authorisation strategy (companion `nita-jenkins`
   change).
 - Caching or rate-limiting the auth sub-request.
-- Replacing the Jenkins deep links in the SPA.
+- Replacing the Jenkins deep links in the SPA (a sidebar shortcut to the Jenkins
+  home is added; the per-job/per-build deep links are unchanged).
 
 ## Decisions
 
@@ -136,19 +138,32 @@ every legitimate target (`/jenkins/job/x/`, `/networks/3`) and rejects
 smallest change that avoids a second copy. Behaviour of the stream — events,
 ANSI stripping, timeouts, 404-while-queued tolerance — is untouched.
 
-### Decision 6: Cause text is fixed-format and derived from the request user
+### Decision 6: Identity is propagated to Jenkins by header, not by cause text
 
-**Choice:** `invoke_job(..., cause=f"Started by {username} via NITA")`, where
-`username` is the initiating webapp user's username. All four user-triggered
-callers pass it: action trigger, network create, network delete, and
-network-type validation. The upload view passes `request.user.username` to
-`NetworkTypeParser.parseProjectFile`, which forwards it to `invoke_job`.
+**Choice:** Jenkins runs the Reverse Proxy Auth realm in header mode. The
+webapp asserts an identity on every Jenkins call through `X-Forwarded-User`:
+`invoke_job(..., initiated_by=username)` acts as the webapp user (so Jenkins
+records a `UserIdCause`, *Started by user <username>*), and all service calls
+(`_make_jenkins_server`, console/Robot relays, bootstrap scripts) act as the
+`JENKINS_USER` service identity. nginx copies `X-Auth-User`/`X-Auth-Role` from
+the forward-auth response into `X-Forwarded-User`/`X-Forwarded-Groups` for
+browser traffic, overriding any client-supplied values and stripping
+`Authorization`. Matrix auth grants `authenticated` read/build/cancel and the
+`admin` group (webapp role) Administer. No password is exchanged with Jenkins.
 
-**Rationale:** Jenkins stores a free-text cause and shows it on the build page
-and in the API (`actions[].causes[].shortDescription`). A stable prefix makes
-it greppable and leaves room to extend the wording later. This is deliberately
-*not* the same thing as Jenkins knowing the user — that is the next wave — but
-it gives operators an audit trail today at zero infrastructure cost.
+**Rationale:** Jenkins only honours a `cause` parameter together with a job
+build-token (`RemoteCause`); without it the build is attributed to whoever
+authenticated, i.e. the service account. Real attribution and "log in to
+Jenkins as a webapp user" both require Jenkins to know the user, and the
+forward-auth contract already produces exactly the identity headers the realm
+consumes. The trust boundary is the network: Jenkins is reachable only from the
+proxy and webapp pods (NetworkPolicy), which is the documented precondition of
+the plugin.
+
+**Rejected:** mirroring webapp users into Jenkins' private realm (passwords
+would still not be shared, so no SSO); per-user API tokens (token lifecycle for
+every user); build tokens with `cause` notes (*Started by remote host … with
+note* — not a user, and still no Jenkins login).
 
 ## Risks / Trade-offs
 

@@ -54,25 +54,30 @@ Jenkins credentials.
 
 ## ADDED Requirements
 
-### Requirement: Builds Carry the Triggering User as Cause
-Every Jenkins build invoked by the Django application on behalf of a user SHALL
-be submitted with a build cause of the form `Started by <username> via NITA`,
-where `<username>` is the authenticated webapp user who made the request. This
-applies to action triggers, network create/delete jobs, and network-type
-validation builds.
+### Requirement: Builds Are Attributed to the Triggering Webapp User
+Every Jenkins build invoked on behalf of a user SHALL assert that user's
+identity to Jenkins via the `X-Forwarded-User` header, so Jenkins records a
+`UserIdCause` for `<username>`. All other webapp→Jenkins calls SHALL assert the
+`JENKINS_USER` service identity the same way. The webapp SHALL NOT send a
+password to Jenkins.
 
-#### Scenario: Action trigger records the cause
+#### Scenario: Action trigger is attributed to the user
 - GIVEN user `alice` triggers an action on a network
 - WHEN the Jenkins build is invoked
-- THEN the build's cause is `Started by alice via NITA`
-- AND the Jenkins build page and `GET /job/{job}/{build}/api/json` show that cause
+- THEN the build request carries `X-Forwarded-User: alice`
+- AND `GET /job/{job}/{build}/api/json` lists a `hudson.model.Cause$UserIdCause` with `userId` `alice`
 
-#### Scenario: Network create records the cause
+#### Scenario: Network create is attributed to the user
 - GIVEN user `bob` creates a network
 - WHEN the `network_template_mgr` build is invoked
-- THEN the build's cause is `Started by bob via NITA`
+- THEN the build request carries `X-Forwarded-User: bob`
 
-#### Scenario: Network-type validation records the cause
+#### Scenario: Network-type validation is attributed to the user
 - GIVEN user `carol` uploads a network type for validation
 - WHEN the `network_type_validator` build is invoked
-- THEN the build's cause is `Started by carol via NITA`
+- THEN the build request carries `X-Forwarded-User: carol`
+
+#### Scenario: Service calls use the service identity without a password
+- GIVEN the webapp relays a console stream or Robot summary, or polls build status
+- WHEN it calls Jenkins
+- THEN the request carries `X-Forwarded-User: <JENKINS_USER>` and no `Authorization` header

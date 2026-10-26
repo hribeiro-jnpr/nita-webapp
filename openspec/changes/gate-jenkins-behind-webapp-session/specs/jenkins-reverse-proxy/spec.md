@@ -23,6 +23,30 @@ authentication decision SHALL be made by the webapp, not the proxy.
 - WHEN a client requests the auth sub-request location directly from outside
 - THEN the proxy returns 404
 
+### Requirement: Proxy propagates the webapp identity to Jenkins
+For a `/jenkins/` request that passed the authentication sub-request, the proxy
+SHALL set `X-Forwarded-User` to the `X-Auth-User` value and `X-Forwarded-Groups`
+to the `X-Auth-Role` value returned by the forward-auth endpoint, SHALL
+overwrite any client-supplied values of those headers, and SHALL strip any
+client-supplied `Authorization` header. Jenkins (Reverse Proxy Auth realm)
+therefore identifies the browser user as the webapp user, with the webapp role
+as their Jenkins group.
+
+#### Scenario: Browser user is known to Jenkins
+- GIVEN a browser logged in to the webapp as `alice` with role `power_user`
+- WHEN it requests `/jenkins/whoAmI/api/json`
+- THEN Jenkins reports `name: alice` with authorities including `authenticated` and `power_user`
+
+#### Scenario: Client cannot spoof identity headers
+- GIVEN a browser logged in to the webapp as `alice`
+- WHEN it requests a `/jenkins/` URL with its own `X-Forwarded-User: admin` and `X-Forwarded-Groups: admin` headers
+- THEN Jenkins still identifies the caller as `alice` with her real role
+
+#### Scenario: Webapp admins administer Jenkins
+- GIVEN a browser logged in to the webapp with role `admin`
+- WHEN it requests `/jenkins/manage/`
+- THEN the page loads (HTTP 200)
+
 ### Requirement: Denied Jenkins requests redirect to the login page
 When the authentication sub-request for a `/jenkins/` request is denied, the
 proxy SHALL respond with a `302` redirect to `/login?next=<original request URI>`

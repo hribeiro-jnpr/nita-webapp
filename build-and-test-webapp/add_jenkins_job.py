@@ -1,7 +1,6 @@
 # Copyright (c) Hewlett Packard Enterprise, 2026. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-import base64
 import http.cookiejar
 import json
 import os
@@ -16,14 +15,11 @@ JENKINS_SERVER_URL = (
     "http://" + jenkins_host_name + ":" + str(jenkins_port) + "/jenkins"
 )
 JENKINS_SERVER_USER = os.getenv("JENKINS_USER", "admin")
-JENKINS_SERVER_PASS = os.getenv("JENKINS_PASS", "admin")
 
 
-def _auth_header() -> str:
-    credentials = base64.b64encode(
-        f"{JENKINS_SERVER_USER}:{JENKINS_SERVER_PASS}".encode()
-    ).decode()
-    return f"Basic {credentials}"
+def _identity_headers() -> dict:
+    # Jenkins' reverse-proxy realm trusts this header from the webapp container.
+    return {"X-Forwarded-User": JENKINS_SERVER_USER}
 
 
 def add_job(job_name, file_name):
@@ -44,7 +40,7 @@ def add_job(job_name, file_name):
     try:
         crumb_req = urllib.request.Request(
             f"{JENKINS_SERVER_URL}/crumbIssuer/api/json",
-            headers={"Authorization": _auth_header()},
+            headers=_identity_headers(),
         )
         with opener.open(crumb_req, timeout=10) as resp:
             body = json.loads(resp.read())
@@ -65,7 +61,7 @@ def add_job(job_name, file_name):
     print("Jenkins server: " + JENKINS_SERVER_URL)
     url = f"{JENKINS_SERVER_URL}/createItem?name={urllib.parse.quote(job_name)}"
     headers = {
-        "Authorization": _auth_header(),
+        **_identity_headers(),
         "Content-Type": "text/xml; charset=utf-8",
     }
     headers.update(crumb_headers)

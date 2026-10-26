@@ -22,24 +22,25 @@
 - [x] 3.1 `LoginPage` reads `next` from the query string; after successful login navigates to it when it is a same-origin relative path (`/…`, not `//…`, no scheme), otherwise to `/`
 - [x] 3.2 Tests in `LoginPage.test.tsx`: valid `next` is followed; `//evil`, `https://…`, and absent `next` all land on `/`
 - [x] 3.3 `npm run lint` and `npm test` pass
+- [x] 3.4 `AppLayout` sidebar gains a trailing `Jenkins ↗` anchor to `/jenkins/` (new tab, `noopener noreferrer`), after Teams / User Management, styled like the other entries; tests in `AppLayout.test.tsx` cover href/target/rel and ordering
 
 ## 4. Authenticated console stream
 
-- [x] 4.1 Extract the Basic-auth header construction from `robot_summary` into a module-private helper in `jenkins_jobs.py`
-- [x] 4.2 Use the helper in `progressive_text_events` so every `progressiveText` request carries `Authorization`
-- [x] 4.3 Test in `test_api_streaming.py`: the `Request` passed to `urllib.request.urlopen` has an `Authorization: Basic …` header; existing generator and view tests still pass
+- [x] 4.1 Extract the Jenkins identity header construction from `robot_summary` into a module-private helper in `jenkins_jobs.py` (backed by `jenkins_config.jenkins_identity_headers`)
+- [x] 4.2 Use the helper in `progressive_text_events` so every `progressiveText` request carries `X-Forwarded-User`
+- [x] 4.3 Test in `test_api_streaming.py`: the `Request` passed to `urllib.request.urlopen` has an `X-Forwarded-User` header and no `Authorization`; existing generator and view tests still pass
 
-## 5. Build cause
+## 5. Identity propagation (build attribution)
 
-- [x] 5.1 Add a `cause` keyword to `invoke_job` and pass it through to `jenkinsapi` `Job.invoke`
-- [x] 5.2 Action trigger, network create/delete, and network-type validation
-      pass `cause=f"Started by {username} via NITA"`; the upload view passes
-      `request.user.username` through `NetworkTypeParser`
-- [x] 5.3 Tests: `invoke_job` forwards `cause`; all four caller paths pass the
-      acting user's name, including network-type upload and validation
+- [x] 5.1 `invoke_job(..., *, initiated_by)` builds its jenkinsapi client with `X-Forwarded-User: <initiated_by>` so Jenkins records a `UserIdCause` for the webapp user; `_make_jenkins_server(acting_user=None)` and all python-jenkins callers (`networktypeparser`, `statusupdater`, `utils`) assert the service identity by header; no password is sent
+- [x] 5.2 Action trigger, network create/delete, and network-type validation pass `initiated_by=request.user.username`; the upload view passes `request.user.username` through `NetworkTypeParser`
+- [x] 5.3 Bootstrap scripts (`ping_jenkins.py`, `configure_jenkins.py`, `add_jenkins_job.py`) use `X-Forwarded-User` instead of Basic auth
+- [x] 5.4 `nginx.conf`: `auth_request_set` copies `X-Auth-User`/`X-Auth-Role` into `X-Forwarded-User`/`X-Forwarded-Groups` on the Jenkins upstream request and clears `Authorization`
+- [x] 5.5 Tests: `invoke_job` asserts `initiated_by` via the requester session headers; all caller paths pass the acting user's name; `_make_jenkins_server` sets the header and no Basic auth
 
 ## 6. Validation
 
 - [x] 6.1 `pytest` green; `openspec validate gate-jenkins-behind-webapp-session --strict` passes
-- [ ] 6.2 End-to-end on the compose stack: log in → open a network → "Jenkins ↗" opens the job page; log out → same link redirects to login and returns to the job page after signing in; trigger an action → build page shows `Started by <user> via NITA`; console stream and Robot summary still render
+- [ ] 6.2 End-to-end on the compose stack: log in → open a network → "Jenkins ↗" opens the job page; log out → same link redirects to login and returns to the job page after signing in; trigger an action → build page shows `Started by user <user>`; console stream and Robot summary still render
 - [x] 6.3 Update `README.md` release notes
+- [x] 6.4 Live on Kubernetes: session `whoAmI` returns the webapp user and role; spoofed identity headers are overridden; webapp-triggered build records `UserIdCause` for the webapp user; password Basic auth to Jenkins is rejected

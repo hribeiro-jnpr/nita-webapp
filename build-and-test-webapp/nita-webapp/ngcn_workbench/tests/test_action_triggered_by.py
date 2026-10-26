@@ -15,6 +15,7 @@ from django.utils import timezone
 from ngcn.api import views as api_views
 from ngcn.models import ActionHistory, CampusNetwork, Workbook
 from rest_framework.test import APIClient
+from types import SimpleNamespace
 
 User = get_user_model()
 
@@ -30,6 +31,7 @@ class _FakeJob:
 class _FakeJenkinsClient:
     def __init__(self, *args, **kwargs):
         self.job = _FakeJob()
+        self.requester = kwargs.get("requester")
         self.__class__.instances.append(self)
 
     instances = []
@@ -87,10 +89,14 @@ def _mock_jenkins(monkeypatch):
         lambda name: {"group_vars/all.yaml": {"build_dir": "/tmp/build"}},
     )
     monkeypatch.setattr(
-        "ngcn.jenkins_config._make_jenkins_server", lambda: _FakeServer()
+        "ngcn.jenkins_config._make_jenkins_server", lambda acting_user=None: _FakeServer()
     )
     monkeypatch.setattr(jenkinsapi_jenkins, "Jenkins", _FakeJenkinsClient)
-    monkeypatch.setattr(jenkinsapi_crumb, "CrumbRequester", lambda *a, **kw: object())
+    monkeypatch.setattr(
+        jenkinsapi_crumb,
+        "CrumbRequester",
+        lambda *a, **kw: SimpleNamespace(session=SimpleNamespace(headers={})),
+    )
 
 
 def _trigger(user, network, action, monkeypatch):
@@ -98,9 +104,9 @@ def _trigger(user, network, action, monkeypatch):
     Workbook.objects.get_or_create(name="wb", campus_network_id=network)
     resp = _client(user).post(f"/api/v1/networks/{network.id}/trigger/{action.id}/")
     assert resp.status_code == 202
-    assert _FakeJenkinsClient.instances[-1].job.calls[-1]["cause"] == (
-        f"Started by {user.username} via NITA"
-    )
+    # Jenkins is told who is acting via the reverse-proxy identity header.
+    headers = _FakeJenkinsClient.instances[-1].requester.session.headers
+    assert headers["X-Forwarded-User"] == user.username
     return ActionHistory.objects.get(id=resp.json()["action_history_id"])
 
 

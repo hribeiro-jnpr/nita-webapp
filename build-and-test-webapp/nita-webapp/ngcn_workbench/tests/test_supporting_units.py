@@ -46,22 +46,34 @@ def test_status_startup_service_middleware_calls_updater(monkeypatch):
 
 def test_status_updater_get_build_status_uses_server_result(monkeypatch):
     updater = statusupdater.StatusUpdater()
-    captured = {}
 
     class FakeJenkins:
-        def __init__(self, base_url, username, password):
-            captured["base_url"] = base_url
-            captured["username"] = username
-            captured["password"] = password
-
         def get_build_info(self, _name, _number):
             return {"result": "SUCCESS"}
 
     monkeypatch.setattr(statusupdater.StatusUpdater, "SERVER", None)
-    monkeypatch.setattr(statusupdater.jenkins, "Jenkins", FakeJenkins)
+    monkeypatch.setattr(
+        statusupdater, "_make_jenkins_server", lambda acting_user=None: FakeJenkins()
+    )
 
     assert updater.getBuildStatus("job-name", 1) == "SUCCESS"
-    assert captured["base_url"].endswith("/jenkins")
+
+
+def test_jenkins_client_asserts_identity_via_header(monkeypatch):
+    from ngcn import jenkins_config
+
+    monkeypatch.setattr(jenkins_config, "JENKINS_SERVER_USER", "svc")
+
+    assert jenkins_config.jenkins_identity_headers() == {"X-Forwarded-User": "svc"}
+    assert jenkins_config.jenkins_identity_headers("alice", "admin") == {
+        "X-Forwarded-User": "alice",
+        "X-Forwarded-Groups": "admin",
+    }
+    service = jenkins_config._make_jenkins_server()
+    assert service._session.headers["X-Forwarded-User"] == "svc"
+    assert service._session.auth is None
+    acting = jenkins_config._make_jenkins_server("alice")
+    assert acting._session.headers["X-Forwarded-User"] == "alice"
 
 
 @pytest.mark.django_db

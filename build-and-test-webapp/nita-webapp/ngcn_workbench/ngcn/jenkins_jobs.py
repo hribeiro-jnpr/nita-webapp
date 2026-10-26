@@ -27,16 +27,11 @@ logger = logging.getLogger(__name__)
 _ANSI_ESCAPE = re.compile(r"(?:\x1B[@-_]|[\x80-\x9F])[0-?]*[ -/]*[@-~]")
 
 
-def _basic_auth_header():
-    """Return the configured Jenkins Basic Authorization header value."""
-    import base64
+def _identity_header():
+    """Return the (name, value) identity header for the Jenkins service identity."""
+    from ngcn.jenkins_config import jenkins_identity_headers
 
-    from ngcn.jenkins_config import JENKINS_SERVER_PASS, JENKINS_SERVER_USER
-
-    token = base64.b64encode(
-        f"{JENKINS_SERVER_USER}:{JENKINS_SERVER_PASS}".encode()
-    ).decode()
-    return "Basic " + token
+    return next(iter(jenkins_identity_headers().items()))
 
 
 def robot_summary(job_name, build_no):
@@ -53,7 +48,7 @@ def robot_summary(job_name, build_no):
 
     url = f"{JENKINS_SERVER_URL}/job/{job_name}/{build_no}/robot/api/json"
     req = urllib.request.Request(url)
-    req.add_header("Authorization", _basic_auth_header())
+    req.add_header(*_identity_header())
     try:
         with urllib.request.urlopen(req, timeout=15) as resp:  # noqa: S310
             data = json.loads(resp.read().decode("utf-8", errors="replace"))
@@ -79,42 +74,32 @@ def robot_summary(job_name, build_no):
     }
 
 
-def _make_crumbed_jenkins():
-    """Return a jenkinsapi ``Jenkins`` client configured with a CSRF crumb."""
+def _make_crumbed_jenkins(acting_user):
+    """Return a jenkinsapi ``Jenkins`` client acting as ``acting_user`` with a CSRF crumb."""
     from jenkinsapi.jenkins import Jenkins
     from jenkinsapi.utils.crumb_requester import CrumbRequester
 
-    from ngcn.jenkins_config import (
-        JENKINS_SERVER_PASS,
-        JENKINS_SERVER_URL,
-        JENKINS_SERVER_USER,
-    )
+    from ngcn.jenkins_config import JENKINS_SERVER_URL, jenkins_identity_headers
 
-    crumb = CrumbRequester(
-        baseurl=JENKINS_SERVER_URL,
-        username=JENKINS_SERVER_USER,
-        password=JENKINS_SERVER_PASS,
-    )
-    return Jenkins(
-        JENKINS_SERVER_URL,
-        username=JENKINS_SERVER_USER,
-        password=JENKINS_SERVER_PASS,
-        requester=crumb,
-    )
+    crumb = CrumbRequester(baseurl=JENKINS_SERVER_URL)
+    crumb.session.headers.update(jenkins_identity_headers(acting_user))
+    return Jenkins(JENKINS_SERVER_URL, requester=crumb)
 
 
-def invoke_job(job_name, build_params=None, files=None, *, cause):
-    """Invoke a Jenkins job with an authenticated crumb and return its build no.
+def invoke_job(job_name, build_params=None, files=None, *, initiated_by):
+    """Invoke a Jenkins job as ``initiated_by`` and return its build number.
 
     Reserves the job's ``nextBuildNumber`` (the number the started build will
-    use), performs the authenticated invocation, retries once on a ``Forbidden``
-    crumb error, and re-raises on any other error (e.g. Jenkins unreachable) so
-    that callers can translate it into a ``503`` response.
+    use), performs the invocation with a crumb while asserting the webapp user's
+    identity to Jenkins (so the build is recorded as *Started by user
+    <initiated_by>*), retries once on a ``Forbidden`` crumb error, and re-raises
+    on any other error (e.g. Jenkins unreachable) so that callers can translate
+    it into a ``503`` response.
 
     :param job_name: the Jenkins job name to invoke.
     :param build_params: optional dict of build parameters.
     :param files: optional dict of files to upload (e.g. ``{"app.zip": fh}``).
-    :param cause: Jenkins build cause describing the initiating webapp user.
+    :param initiated_by: username of the webapp user starting the build.
     :returns: the reserved build number for this invocation.
     """
     from ngcn.jenkins_config import _make_jenkins_server
@@ -128,8 +113,7 @@ def invoke_job(job_name, build_params=None, files=None, *, cause):
             kwargs["build_params"] = build_params
         if files is not None:
             kwargs["files"] = files
-        kwargs["cause"] = cause
-        _make_crumbed_jenkins().get_job(job_name).invoke(**kwargs)
+        _make_crumbed_jenkins(initiated_by).get_job(job_name).invoke(**kwargs)
 
     try:
         _do_invoke()
@@ -170,7 +154,7 @@ def progressive_text_events(job_name, build_no):
         try:
             url = f"{base_url}?start={offset}"
             req = urllib.request.Request(url)
-            req.add_header("Authorization", _basic_auth_header())
+            req.add_header(*_identity_header())
             with urllib.request.urlopen(req, timeout=10) as resp:  # noqa: S310
                 chunk = resp.read().decode("utf-8", errors="replace")
                 more_data = resp.headers.get("X-More-Data", "false").lower() == "true"

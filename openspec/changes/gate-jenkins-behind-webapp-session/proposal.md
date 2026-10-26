@@ -44,13 +44,19 @@ Two facts shape the design:
 - **Login page honours `?next=`.** After a successful login the SPA navigates
   to the `next` query parameter when it is a same-origin relative path, and to
   `/` otherwise. This completes the round-trip from a gated Jenkins deep link.
+- **Sidebar shortcut to Jenkins.** The sidebar ends with a `Jenkins ↗` entry
+  (after User Management) opening `/jenkins/` in a new tab, so the Jenkins home
+  is one click away now that a webapp session is also a Jenkins session.
 - **The SSE console stream authenticates to Jenkins.** `progressive_text_events`
   sends the same Basic `Authorization` header `robot_summary` already sends.
   No API shape change; the stream behaves identically from the SPA's view.
 - **Builds record who asked for them.** All four user-triggered `invoke_job`
-  paths pass a Jenkins build *cause* of the form `Started by <username> via
-  NITA`, including network-type validation, so Jenkins build pages name the
-  webapp user instead of only the service account.
+  paths assert the webapp user's identity to Jenkins (`X-Forwarded-User`,
+  trusted by Jenkins' Reverse Proxy Auth realm), including network-type
+  validation, so Jenkins records *Started by user <username>* instead of the
+  service account. The proxy forwards the same identity (plus the webapp role
+  as `X-Forwarded-Groups`) for browser traffic, so a webapp session *is* the
+  Jenkins session and webapp admins administer Jenkins.
 
 ## Capabilities
 
@@ -59,20 +65,24 @@ Two facts shape the design:
 - `auth`: adds the forward-auth endpoint used by the reverse proxy.
 - `jenkins-reverse-proxy`: the `/jenkins/` route requires a valid webapp
   session and redirects unauthenticated browsers to the SPA login page.
-- `jenkins-trigger-security`: *every* Django→Jenkins HTTP call is
-  authenticated, explicitly including progressive console text and the Robot
-  summary relay; builds carry the triggering user as their cause.
+- `jenkins-trigger-security`: *every* Django→Jenkins HTTP call asserts an
+  identity by header (no password), explicitly including progressive console
+  text and the Robot summary relay; builds are attributed to the triggering
+  webapp user.
 - `frontend-skeleton`: the login page redirects to a safe `next` target after
   success.
+- `spa-layout`: the sidebar gains a trailing `Jenkins ↗` shortcut to the
+  proxied Jenkins home.
 
 ## Impact
 
 - **Backend:** one new view and URL; one header added in `jenkins_jobs.py`;
-  one `cause=` keyword threaded through `invoke_job` and its four callers
+  one `initiated_by=` keyword threaded through `invoke_job` and its four callers
   (action trigger, network create, network delete, and network-type
   validation). The upload view passes the acting username into
   `NetworkTypeParser`. `openapi.yaml` is regenerated for the new endpoint.
-- **Frontend:** `LoginPage` reads and validates `next`. No new dependencies.
+- **Frontend:** `LoginPage` reads and validates `next`; `AppLayout` adds the
+  sidebar `Jenkins ↗` anchor. No new dependencies.
 - **Proxy:** `nginx/nginx.conf` gains an internal auth location, an
   `auth_request` directive in `location /jenkins/`, and a named location for
   the login redirect. The same file is what `nita/install.sh` publishes as the

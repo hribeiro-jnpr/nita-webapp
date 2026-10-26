@@ -3,7 +3,6 @@
 
 """Tests for the SSE streaming endpoint GET /api/v1/action-history/{id}/stream/."""
 
-import base64
 import urllib.error
 from unittest.mock import patch
 
@@ -114,7 +113,7 @@ def test_generator_emits_done_when_no_more_data():
     assert len(done_events) == 1
 
 
-def test_progressive_text_request_uses_basic_auth(monkeypatch):
+def test_progressive_text_request_asserts_service_identity(monkeypatch):
     from unittest.mock import MagicMock
 
     from ngcn import jenkins_config
@@ -122,7 +121,6 @@ def test_progressive_text_request_uses_basic_auth(monkeypatch):
 
     monkeypatch.setattr(jenkins_config, "JENKINS_SERVER_URL", "http://jenkins:8080/jenkins")
     monkeypatch.setattr(jenkins_config, "JENKINS_SERVER_USER", "service-user")
-    monkeypatch.setattr(jenkins_config, "JENKINS_SERVER_PASS", "service-pass")
     monkeypatch.setattr("ngcn.jenkins_jobs.time.sleep", lambda _seconds: None)
 
     response = MagicMock()
@@ -142,6 +140,6 @@ def test_progressive_text_request_uses_basic_auth(monkeypatch):
     monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
     events = list(progressive_text_events("job-test", 1))
 
-    expected = "Basic " + base64.b64encode(b"service-user:service-pass").decode()
-    assert requests[0].get_header("Authorization") == expected
+    assert requests[0].get_header("X-forwarded-user") == "service-user"
+    assert requests[0].get_header("Authorization") is None
     assert events[-1] == "event: done\ndata: \n\n"

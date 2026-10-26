@@ -15,6 +15,7 @@ Coverage:
 
 import io
 import json
+from types import SimpleNamespace
 
 import pytest
 from django.utils import timezone
@@ -76,8 +77,8 @@ def _mock_jenkins_build(monkeypatch, success):
 
     calls = []
 
-    def _fake_invoke(job_name, build_params=None, files=None, *, cause):
-        calls.append({"job_name": job_name, "cause": cause})
+    def _fake_invoke(job_name, build_params=None, files=None, *, initiated_by):
+        calls.append({"job_name": job_name, "initiated_by": initiated_by})
         if not success:
             raise Exception("Jenkins service unavailable")
         return 1
@@ -267,7 +268,7 @@ def test_network_create(api_client, campus_type, monkeypatch):
     assert response.status_code == 201
     assert CampusNetwork.objects.filter(name="new-net").exists()
     assert calls == [
-        {"job_name": "network_template_mgr", "cause": "Started by tester via NITA"}
+        {"job_name": "network_template_mgr", "initiated_by": "tester"}
     ]
 
 
@@ -308,7 +309,7 @@ def test_network_delete(api_client, campus_network, monkeypatch):
     assert response.status_code == 202
     assert not CampusNetwork.objects.filter(id=campus_network.id).exists()
     assert calls == [
-        {"job_name": "network_template_mgr", "cause": "Started by tester via NITA"}
+        {"job_name": "network_template_mgr", "initiated_by": "tester"}
     ]
 
 
@@ -458,10 +459,14 @@ def test_trigger_action_returns_202_and_creates_history(
         lambda name: {"group_vars/all.yaml": {"build_dir": "/tmp/build"}},
     )
     monkeypatch.setattr(
-        "ngcn.jenkins_config._make_jenkins_server", lambda: _FakeServer()
+        "ngcn.jenkins_config._make_jenkins_server", lambda acting_user=None: _FakeServer()
     )
     monkeypatch.setattr(jenkinsapi_jenkins, "Jenkins", _FakeJenkinsClient)
-    monkeypatch.setattr(jenkinsapi_crumb, "CrumbRequester", lambda *a, **kw: object())
+    monkeypatch.setattr(
+        jenkinsapi_crumb,
+        "CrumbRequester",
+        lambda *a, **kw: SimpleNamespace(session=SimpleNamespace(headers={})),
+    )
 
     response = api_client.post(
         f"/api/v1/networks/{campus_network.id}/trigger/{action.id}/"

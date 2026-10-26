@@ -16,8 +16,11 @@ Please refer to the [README][readme] for more details.
 
 The Jenkins UI now requires an authenticated webapp session and redirects
 unauthenticated visitors through login back to the requested Jenkins page. The
-webapp also authenticates its Jenkins console-stream requests, and builds
-record the username of the webapp user who initiated them.
+webapp session is also your Jenkins identity: the proxy forwards the webapp
+username and role to Jenkins, builds started from the webapp are recorded as
+*Started by user <username>*, and webapp admins administer Jenkins. There is no
+separate Jenkins login; the webapp asserts its service identity (`JENKINS_USER`)
+to Jenkins by header and no longer uses `JENKINS_PASS`.
 
 # Installing
 
@@ -37,12 +40,14 @@ Jenkins runs behind the same proxy under the `/jenkins` path prefix
 
 ## Default User Credentials
 
-The default user credentials for the NITA webapp and Jenkins are listed below:
+The default user credentials for the NITA webapp are listed below. Jenkins has
+no separate login: signing in to the webapp signs you in to Jenkins with the
+same username, and your webapp role (`user`, `power_user`, `admin`) is your
+Jenkins group.
 
 | | Username | Password |
 |---|---|---|
 | Webapp| vagrant | vagrant123 |
-| Jenkins | admin | admin|
 
 ## User Onboarding
 
@@ -160,6 +165,11 @@ No containers tagged as "latest" are provided by the package.
   `django_tables2` dependency was dropped.
 * **BREAKING** — Jenkins is now served through the webapp proxy at
   `https://<host>/jenkins/` instead of on port 8443.
+* **BREAKING** — Jenkins no longer has its own user database. The proxy
+  forwards the webapp session identity (`X-Forwarded-User` / `X-Forwarded-Groups`)
+  and Jenkins trusts it (Reverse Proxy Auth realm); builds triggered from the
+  webapp are attributed to the real user. `JENKINS_PASS` is no longer used by
+  the webapp.
 * **BREAKING** — Deleting a network type is refused with `409 Conflict` while
   networks still reference it. Previously the delete cascaded and silently
   removed those networks; the referencing networks must now be deleted first.
