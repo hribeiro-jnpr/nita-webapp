@@ -30,13 +30,26 @@ JENKINS_SERVER_USER = os.getenv("JENKINS_USER", "admin")
 # forward-auth response for browser traffic). No password is exchanged.
 JENKINS_IDENTITY_HEADER = "X-Forwarded-User"
 JENKINS_GROUPS_HEADER = "X-Forwarded-Groups"
+JENKINS_GROUPS_DELIMITER = "|"
 
 
-def jenkins_identity_headers(username=None, role=None):
+def jenkins_team_group(team_id):
+    """Jenkins group name for a webapp team (id-based so renames are harmless)."""
+    return f"team-{team_id}"
+
+
+def jenkins_groups_for(user):
+    """Jenkins groups mirroring the webapp model: the role plus one group per team."""
+    groups = [getattr(user, "role", "") or ""]
+    groups += [jenkins_team_group(tid) for tid in user.teams.values_list("id", flat=True)]
+    return [g for g in groups if g]
+
+
+def jenkins_identity_headers(username=None, groups=None):
     """Return headers asserting ``username`` (default: service identity) to Jenkins."""
     headers = {JENKINS_IDENTITY_HEADER: username or JENKINS_SERVER_USER}
-    if role:
-        headers[JENKINS_GROUPS_HEADER] = role
+    if groups:
+        headers[JENKINS_GROUPS_HEADER] = JENKINS_GROUPS_DELIMITER.join(groups)
     return headers
 
 

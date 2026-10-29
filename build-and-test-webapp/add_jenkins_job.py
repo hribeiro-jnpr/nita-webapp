@@ -73,7 +73,18 @@ def add_job(job_name, file_name):
             print(f"Job '{job_name}' created: HTTP {resp.status}")
     except urllib.error.HTTPError as e:
         if e.code == 400:
-            print(f"Job '{job_name}' already exists (HTTP 400), skipping.")
+            # Already exists: push the shipped definition so upgrades take effect.
+            update_req = urllib.request.Request(
+                f"{JENKINS_SERVER_URL}/job/{urllib.parse.quote(job_name)}/config.xml",
+                data=xml.encode("utf-8"),
+                headers=headers,
+                method="POST",
+            )
+            try:
+                with opener.open(update_req, timeout=30) as resp:
+                    print(f"Job '{job_name}' already exists; definition updated: HTTP {resp.status}")
+            except Exception as update_err:
+                print(f"Error while updating job '{job_name}': {update_err}")
         else:
             body_text = ""
             try:

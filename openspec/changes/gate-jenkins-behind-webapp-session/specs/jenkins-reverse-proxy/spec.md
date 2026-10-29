@@ -25,17 +25,20 @@ authentication decision SHALL be made by the webapp, not the proxy.
 
 ### Requirement: Proxy propagates the webapp identity to Jenkins
 For a `/jenkins/` request that passed the authentication sub-request, the proxy
-SHALL set `X-Forwarded-User` to the `X-Auth-User` value and `X-Forwarded-Groups`
-to the `X-Auth-Role` value returned by the forward-auth endpoint, SHALL
-overwrite any client-supplied values of those headers, and SHALL strip any
-client-supplied `Authorization` header. Jenkins (Reverse Proxy Auth realm)
-therefore identifies the browser user as the webapp user, with the webapp role
-as their Jenkins group.
+SHALL set `X-Forwarded-User` from `X-Auth-User` and `X-Forwarded-Groups` from
+`X-Auth-Groups`, overwriting any client-supplied values, and SHALL strip any
+client-supplied `Authorization` header. Jenkins thus sees the webapp user with
+the webapp role and `team-<id>` memberships as groups.
 
 #### Scenario: Browser user is known to Jenkins
-- GIVEN a browser logged in to the webapp as `alice` with role `power_user`
+- GIVEN a browser logged in to the webapp as `alice` with role `user` who belongs to team 7
 - WHEN it requests `/jenkins/whoAmI/api/json`
-- THEN Jenkins reports `name: alice` with authorities including `authenticated` and `power_user`
+- THEN Jenkins reports `name: alice` with authorities `authenticated`, `user` and `team-7`
+
+#### Scenario: Team membership change takes effect immediately
+- GIVEN `bob` can read a network's jobs only through his team
+- WHEN an admin removes `bob` from that team
+- THEN his next `/jenkins/` request no longer carries that `team-<id>` group and the job pages are HTTP 404
 
 #### Scenario: Client cannot spoof identity headers
 - GIVEN a browser logged in to the webapp as `alice`

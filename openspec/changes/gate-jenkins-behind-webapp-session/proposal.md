@@ -48,15 +48,21 @@ Two facts shape the design:
   (after User Management) opening `/jenkins/` in a new tab, so the Jenkins home
   is one click away now that a webapp session is also a Jenkins session.
 - **The SSE console stream authenticates to Jenkins.** `progressive_text_events`
-  sends the same Basic `Authorization` header `robot_summary` already sends.
+  asserts the service identity by header, like `robot_summary`.
   No API shape change; the stream behaves identically from the SPA's view.
-- **Builds record who asked for them.** All four user-triggered `invoke_job`
-  paths assert the webapp user's identity to Jenkins (`X-Forwarded-User`,
-  trusted by Jenkins' Reverse Proxy Auth realm), including network-type
-  validation, so Jenkins records *Started by user <username>* instead of the
-  service account. The proxy forwards the same identity (plus the webapp role
-  as `X-Forwarded-Groups`) for browser traffic, so a webapp session *is* the
-  Jenkins session and webapp admins administer Jenkins.
+- **Builds record who asked for them.** Per-network action triggers assert the
+  webapp user's identity and groups to Jenkins (`X-Forwarded-User` /
+  `X-Forwarded-Groups`, trusted by Jenkins' Reverse Proxy Auth realm), so
+  Jenkins records *Started by user <username>* instead of the service account.
+  Management jobs (`network_template_mgr`, `network_type_validator`) run as the
+  service identity. The proxy forwards the same identity for browser traffic,
+  so a webapp session *is* the Jenkins session.
+- **Jenkins access mirrors the webapp.** The groups header is the role plus one
+  `team-<id>` per team. `network_template_mgr` writes a per-job matrix into
+  every generated job (owner read/build/cancel, team read) and re-applies it
+  (`operation=acl`) when the webapp changes a network's team or transfers
+  ownership; admins administer, power users see everything, regular users see
+  only their own and team-shared networks' jobs — exactly as in the webapp.
 
 ## Capabilities
 
@@ -81,6 +87,10 @@ Two facts shape the design:
   (action trigger, network create, network delete, and network-type
   validation). The upload view passes the acting username into
   `NetworkTypeParser`. `openapi.yaml` is regenerated for the new endpoint.
+- **Jenkins job template:** `network_template_mgr.xml` creates/deletes the
+  per-network jobs through the REST API with the identity header instead of
+  `jenkins-cli.jar` with a password (which the header realm rejects), and now
+  fails the build when a job cannot be created or deleted.
 - **Frontend:** `LoginPage` reads and validates `next`; `AppLayout` adds the
   sidebar `Jenkins ↗` anchor. No new dependencies.
 - **Proxy:** `nginx/nginx.conf` gains an internal auth location, an

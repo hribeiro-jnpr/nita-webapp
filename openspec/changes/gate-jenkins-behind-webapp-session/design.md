@@ -145,11 +145,16 @@ webapp asserts an identity on every Jenkins call through `X-Forwarded-User`:
 `invoke_job(..., initiated_by=username)` acts as the webapp user (so Jenkins
 records a `UserIdCause`, *Started by user <username>*), and all service calls
 (`_make_jenkins_server`, console/Robot relays, bootstrap scripts) act as the
-`JENKINS_USER` service identity. nginx copies `X-Auth-User`/`X-Auth-Role` from
+`JENKINS_USER` service identity. nginx copies `X-Auth-User`/`X-Auth-Groups` from
 the forward-auth response into `X-Forwarded-User`/`X-Forwarded-Groups` for
 browser traffic, overriding any client-supplied values and stripping
-`Authorization`. Matrix auth grants `authenticated` read/build/cancel and the
-`admin` group (webapp role) Administer. No password is exchanged with Jenkins.
+`Authorization`. Jenkins runs a project-based matrix: `admin` Administer,
+`power_user` read/build/cancel everywhere, `authenticated` Overall/Read only;
+each per-network job carries its own matrix (owner read/build/cancel,
+`team-<id>` read) written by `network_template_mgr` on create and re-applied
+(`operation=acl`) on team change or ownership transfer. Management jobs are
+invoked as the service identity so regular users never need Build on them.
+No password is exchanged with Jenkins.
 
 **Rationale:** Jenkins only honours a `cause` parameter together with a job
 build-token (`RemoteCause`); without it the build is attributed to whoever

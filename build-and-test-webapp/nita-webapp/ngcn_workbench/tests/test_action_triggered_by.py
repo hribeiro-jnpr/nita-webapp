@@ -104,9 +104,10 @@ def _trigger(user, network, action, monkeypatch):
     Workbook.objects.get_or_create(name="wb", campus_network_id=network)
     resp = _client(user).post(f"/api/v1/networks/{network.id}/trigger/{action.id}/")
     assert resp.status_code == 202
-    # Jenkins is told who is acting via the reverse-proxy identity header.
+    # Jenkins is told who is acting (and their groups) via the reverse-proxy identity headers.
     headers = _FakeJenkinsClient.instances[-1].requester.session.headers
     assert headers["X-Forwarded-User"] == user.username
+    assert headers["X-Forwarded-Groups"].split("|")[0] == user.role
     return ActionHistory.objects.get(id=resp.json()["action_history_id"])
 
 

@@ -65,15 +65,31 @@ def test_jenkins_client_asserts_identity_via_header(monkeypatch):
     monkeypatch.setattr(jenkins_config, "JENKINS_SERVER_USER", "svc")
 
     assert jenkins_config.jenkins_identity_headers() == {"X-Forwarded-User": "svc"}
-    assert jenkins_config.jenkins_identity_headers("alice", "admin") == {
+    assert jenkins_config.jenkins_identity_headers("alice", ["admin", "team-3"]) == {
         "X-Forwarded-User": "alice",
-        "X-Forwarded-Groups": "admin",
+        "X-Forwarded-Groups": "admin|team-3",
     }
     service = jenkins_config._make_jenkins_server()
     assert service._session.headers["X-Forwarded-User"] == "svc"
     assert service._session.auth is None
     acting = jenkins_config._make_jenkins_server("alice")
     assert acting._session.headers["X-Forwarded-User"] == "alice"
+
+
+@pytest.mark.django_db
+def test_jenkins_groups_mirror_role_and_teams():
+    from django.contrib.auth import get_user_model
+    from ngcn import jenkins_config
+    from ngcn.models import Team
+
+    user = get_user_model().objects.create_user(
+        username="bob", password="x", role="user"
+    )
+    assert jenkins_config.jenkins_groups_for(user) == ["user"]
+    team = Team.objects.create(name="t", created_by=user)
+    team.members.add(user)
+    assert jenkins_config.jenkins_groups_for(user) == ["user", f"team-{team.id}"]
+    assert jenkins_config.jenkins_team_group(team.id) == f"team-{team.id}"
 
 
 @pytest.mark.django_db

@@ -78,7 +78,15 @@ def _mock_jenkins_build(monkeypatch, success):
     calls = []
 
     def _fake_invoke(job_name, build_params=None, files=None, *, initiated_by):
-        calls.append({"job_name": job_name, "initiated_by": initiated_by})
+        calls.append(
+            {
+                "job_name": job_name,
+                "initiated_by": initiated_by,
+                "operation": (build_params or {}).get("operation"),
+                "owner": (build_params or {}).get("owner"),
+                "team_group": (build_params or {}).get("team_group"),
+            }
+        )
         if not success:
             raise Exception("Jenkins service unavailable")
         return 1
@@ -267,9 +275,75 @@ def test_network_create(api_client, campus_type, monkeypatch):
     )
     assert response.status_code == 201
     assert CampusNetwork.objects.filter(name="new-net").exists()
+    # Management job runs as the service identity; the owner is passed so the
+    # per-network Jenkins jobs are restricted to them.
     assert calls == [
-        {"job_name": "network_template_mgr", "initiated_by": "tester"}
+        {
+            "job_name": "network_template_mgr",
+            "initiated_by": None,
+            "operation": "create",
+            "owner": "tester",
+            "team_group": "",
+        }
     ]
+
+
+@pytest.mark.django_db
+def test_network_create_shared_with_team_passes_team_group(
+    api_client, user, campus_type, monkeypatch
+):
+    from ngcn.models import Team
+
+    team = Team.objects.create(name="netops", created_by=user)
+    team.members.add(user)
+    calls = _mock_jenkins_build(monkeypatch, success=True)
+    response = api_client.post(
+        "/api/v1/networks/",
+        {
+            "name": "shared-net",
+            "status": "Initialized",
+            "description": "d",
+            "host_file": "h",
+            "campus_type": campus_type.id,
+            "team": team.id,
+        },
+    )
+    assert response.status_code == 201
+    assert calls[0]["owner"] == "tester"
+    assert calls[0]["team_group"] == f"team-{team.id}"
+
+
+@pytest.mark.django_db
+def test_network_team_change_syncs_jenkins_acl(
+    api_client, user, campus_network, monkeypatch
+):
+    from ngcn.models import Team
+
+    team = Team.objects.create(name="netops", created_by=user)
+    campus_network.owner = user
+    campus_network.save(update_fields=["owner"])
+    calls = _mock_jenkins_build(monkeypatch, success=True)
+
+    response = api_client.patch(
+        f"/api/v1/networks/{campus_network.id}/", {"team": team.id}, format="json"
+    )
+
+    assert response.status_code == 200
+    assert calls == [
+        {
+            "job_name": "network_template_mgr",
+            "initiated_by": None,
+            "operation": "acl",
+            "owner": "tester",
+            "team_group": f"team-{team.id}",
+        }
+    ]
+    # A change that leaves the team alone does not touch Jenkins.
+    response = api_client.patch(
+        f"/api/v1/networks/{campus_network.id}/", {"description": "x"}, format="json"
+    )
+    assert response.status_code == 200
+    assert len(calls) == 1
 
 
 @pytest.mark.django_db
@@ -308,9 +382,9 @@ def test_network_delete(api_client, campus_network, monkeypatch):
     response = api_client.delete(f"/api/v1/networks/{campus_network.id}/")
     assert response.status_code == 202
     assert not CampusNetwork.objects.filter(id=campus_network.id).exists()
-    assert calls == [
-        {"job_name": "network_template_mgr", "initiated_by": "tester"}
-    ]
+    assert calls[0]["job_name"] == "network_template_mgr"
+    assert calls[0]["initiated_by"] is None
+    assert calls[0]["operation"] == "delete"
 
 
 @pytest.mark.django_db

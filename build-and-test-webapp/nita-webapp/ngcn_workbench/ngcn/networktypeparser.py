@@ -85,7 +85,9 @@ class NetworkTypeParser:
                                 "operation": "add",
                             },
                             files={"app.zip": app_zip_file},
-                            initiated_by=initiated_by,
+                            # Management job: runs as the service identity; the
+                            # uploading user is recorded by the webapp.
+                            initiated_by=None,
                         )
                 except Exception as exc:
                     logger.error("Jenkins unreachable during network type load")
@@ -97,7 +99,10 @@ class NetworkTypeParser:
                         },
                         status=503,
                     )
-                logger.debug("Invoked Jenkins Job to add zip file (non-blocking)")
+                logger.debug(
+                    "Invoked Jenkins Job to add zip file (non-blocking) for %s",
+                    initiated_by,
+                )
 
                 # Register the network type optimistically (consistent with the
                 # non-blocking network create flow). The console stream gives the

@@ -123,6 +123,21 @@ def test_forward_auth_session_returns_identity_headers(user):
     assert response.content == b""
     assert response["X-Auth-User"] == "tester"
     assert response["X-Auth-Role"] == "admin"
+    assert response["X-Auth-Groups"] == "admin"
+
+
+@pytest.mark.django_db
+def test_forward_auth_groups_include_teams(user):
+    from ngcn.models import Team
+
+    team = Team.objects.create(name="netops", created_by=user)
+    team.members.add(user)
+    client = APIClient()
+    client.force_login(user)
+
+    response = client.get("/api/v1/auth/forward/")
+
+    assert response["X-Auth-Groups"] == f"admin|team-{team.id}"
 
 
 @pytest.mark.django_db

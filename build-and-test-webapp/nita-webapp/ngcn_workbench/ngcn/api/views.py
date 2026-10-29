@@ -78,6 +78,7 @@ from ngcn.models import (
     Workbook,
 )
 from ngcn.networktypeparser import NetworkTypeParser
+from ngcn.jenkins_config import jenkins_team_group
 from ngcn.workbook import (
     GridDataManager,
     create_new_inv,
@@ -109,6 +110,17 @@ from .serializers import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _sync_networks_acl(networks):
+    """Best-effort refresh of Jenkins job ACLs; the DB change is already committed."""
+    from ngcn import jenkins_jobs
+
+    for network in networks:
+        try:
+            jenkins_jobs.sync_network_acl(network)
+        except Exception as exc:
+            logger.error("Jenkins ACL sync failed for network %s: %s", network.name, exc)
 
 # ── Session auth views ─────────────────────────────────────────────────────────
 
@@ -222,9 +234,15 @@ def me_view(request):
 @permission_classes([IsAuthenticated])
 def forward_auth_view(request):
     """Authorize the proxy using a webapp session and return caller headers."""
+    from ngcn.jenkins_config import JENKINS_GROUPS_DELIMITER, jenkins_groups_for
+
     response = Response(status=status.HTTP_200_OK)
     response["X-Auth-User"] = request.user.get_username()
     response["X-Auth-Role"] = getattr(request.user, "role", "") or ""
+    # Role plus team-<id> groups: Jenkins' per-job matrix is keyed on these.
+    response["X-Auth-Groups"] = JENKINS_GROUPS_DELIMITER.join(
+        jenkins_groups_for(request.user)
+    )
     return response
 
 
@@ -438,7 +456,7 @@ class CampusTypeViewSet(
         parser = NetworkTypeParser()
         result = parser.parseProjectFile(
             file_name,
-            initiated_by=request.user.username,
+            initiated_by=request.user.get_username(),
         )
         default_storage.delete(file_name)
         if hasattr(result, "status_code"):
@@ -499,6 +517,13 @@ class CampusNetworkViewSet(viewsets.ModelViewSet):
             return [IsAuthenticated()]
         return [IsAuthenticated(), IsOwnerOrTeamMemberOrAdmin()]
 
+    def perform_update(self, serializer):
+        """Persist the change and mirror a team change onto the Jenkins job ACLs."""
+        previous_team_id = serializer.instance.team_id
+        instance = serializer.save()
+        if instance.team_id != previous_team_id:
+            _sync_networks_acl([instance])
+
     def get_queryset(self):
         qs = CampusNetwork.objects.all()
         user = self.request.user
@@ -538,13 +563,20 @@ class CampusNetworkViewSet(viewsets.ModelViewSet):
             "network_name": network_name,
             "hosts": host_file,
             "network_desc": network_desc,
+            # Per-network Jenkins jobs are restricted to the owner (+ team read).
+            "owner": request.user.get_username(),
+            "team_group": (
+                jenkins_team_group(validated["team"].id)
+                if validated.get("team") is not None
+                else ""
+            ),
         }
 
         try:
             build_no = jenkins_jobs.invoke_job(
                 action_url,
                 build_params=build_params,
-                initiated_by=request.user.username,
+                initiated_by=None,
             )
         except Exception as exc:
             logger.error(
@@ -598,7 +630,7 @@ class CampusNetworkViewSet(viewsets.ModelViewSet):
             build_no = jenkins_jobs.invoke_job(
                 action_url,
                 build_params=build_params,
-                initiated_by=request.user.username,
+                initiated_by=None,
             )
         except Exception as exc:
             logger.error(
@@ -641,6 +673,7 @@ class CampusNetworkViewSet(viewsets.ModelViewSet):
 
         Expects multipart/form-data with field name ``file``.
         """
+        self.get_object()  # visibility + object permission
         up_file = request.FILES.get("file")
         if not up_file:
             return Response(
@@ -684,6 +717,7 @@ class CampusNetworkViewSet(viewsets.ModelViewSet):
         ``headers`` is the list of column names and ``rows`` is a list of
         value arrays (one array per data row).
         """
+        self.get_object()  # visibility + object permission
         try:
             dm = GridDataManager()
             raw_sheets = dm.get_sheets_by_campus_network(pk)
@@ -720,10 +754,11 @@ class CampusNetworkViewSet(viewsets.ModelViewSet):
 
         Expects a JSON body ``{"data": [{"name": "...", "headers": [...], "rows": [[...]]}]}``.
         """
+        self.get_object()  # visibility + object permission
         try:
             import collections
 
-            payload = json.loads(request.body.decode("utf-8"))
+            payload = request.data
             dm = GridDataManager()
             sheets = dm.get_sheets_by_campus_network(pk)
             for grid in payload["data"]:
@@ -749,6 +784,7 @@ class CampusNetworkViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["delete"], url_path="workbook/clear")
     def clear_workbook(self, request, pk=None):
         """Delete all configuration grid data for this network."""
+        self.get_object()  # visibility + object permission
         try:
             dm = GridDataManager()
             dm.delete_workbook(pk)
@@ -774,6 +810,7 @@ class CampusNetworkViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["get"], url_path="workbook/download")
     def download_workbook(self, request, pk=None):
         """Download the configuration data as an Excel file."""
+        self.get_object()  # visibility + object permission
         try:
             create_workbook(pk)
             dm = GridDataManager()
@@ -826,6 +863,7 @@ class CampusNetworkViewSet(viewsets.ModelViewSet):
         """
         from ngcn.workbook import updateCampusNetworkStatusOnDB
 
+        campus_network = self.get_object()  # visibility + object permission
         try:
             action_obj = Action.objects.get(pk=action_id)
         except Action.DoesNotExist:
@@ -835,8 +873,6 @@ class CampusNetworkViewSet(viewsets.ModelViewSet):
             )
 
         try:
-            campus_network = CampusNetwork.objects.get(pk=pk)
-
             if Workbook.objects.filter(campus_network_id=pk).count() == 0:
                 return Response(
                     {
@@ -865,7 +901,7 @@ class CampusNetworkViewSet(viewsets.ModelViewSet):
                     action_url,
                     build_params={"build_dir": build_dir},
                     files={"data.json": json.dumps(configuration_data)},
-                    initiated_by=request.user.username,
+                    initiated_by=request.user,
                 )
             except Exception as exc:
                 logger.error(
@@ -1657,4 +1693,6 @@ class UserViewSet(
                 CampusType.objects.filter(created_by=target).update(
                     created_by=type_recipient
                 )
+        if net_recipient is not None:
+            _sync_networks_acl(CampusNetwork.objects.filter(owner=net_recipient))
         return Response({"status": "transferred"}, status=status.HTTP_200_OK)

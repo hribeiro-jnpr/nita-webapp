@@ -74,7 +74,7 @@ def robot_summary(job_name, build_no):
     }
 
 
-def _make_crumbed_jenkins(acting_user):
+def _make_crumbed_jenkins(acting_user, groups=None):
     """Return a jenkinsapi ``Jenkins`` client acting as ``acting_user`` with a CSRF crumb."""
     from jenkinsapi.jenkins import Jenkins
     from jenkinsapi.utils.crumb_requester import CrumbRequester
@@ -82,7 +82,7 @@ def _make_crumbed_jenkins(acting_user):
     from ngcn.jenkins_config import JENKINS_SERVER_URL, jenkins_identity_headers
 
     crumb = CrumbRequester(baseurl=JENKINS_SERVER_URL)
-    crumb.session.headers.update(jenkins_identity_headers(acting_user))
+    crumb.session.headers.update(jenkins_identity_headers(acting_user, groups))
     return Jenkins(JENKINS_SERVER_URL, requester=crumb)
 
 
@@ -91,21 +91,24 @@ def invoke_job(job_name, build_params=None, files=None, *, initiated_by):
 
     Reserves the job's ``nextBuildNumber`` (the number the started build will
     use), performs the invocation with a crumb while asserting the webapp user's
-    identity to Jenkins (so the build is recorded as *Started by user
-    <initiated_by>*), retries once on a ``Forbidden`` crumb error, and re-raises
-    on any other error (e.g. Jenkins unreachable) so that callers can translate
-    it into a ``503`` response.
+    identity and groups to Jenkins (so the build is recorded as *Started by user
+    <initiated_by>* and Jenkins applies that user's per-job permissions), retries
+    once on a ``Forbidden`` crumb error, and re-raises on any other error (e.g.
+    Jenkins unreachable) so that callers can translate it into a ``503`` response.
 
     :param job_name: the Jenkins job name to invoke.
     :param build_params: optional dict of build parameters.
     :param files: optional dict of files to upload (e.g. ``{"app.zip": fh}``).
-    :param initiated_by: username of the webapp user starting the build.
+    :param initiated_by: the webapp ``User`` starting the build, or ``None`` to
+        run as the service identity (internal management jobs).
     :returns: the reserved build number for this invocation.
     """
-    from ngcn.jenkins_config import _make_jenkins_server
+    from ngcn.jenkins_config import _make_jenkins_server, jenkins_groups_for
 
     server = _make_jenkins_server()
     build_number = server.get_job_info(job_name)["nextBuildNumber"]
+    username = initiated_by.get_username() if initiated_by is not None else None
+    groups = jenkins_groups_for(initiated_by) if initiated_by is not None else None
 
     def _do_invoke():
         kwargs = {}
@@ -113,7 +116,7 @@ def invoke_job(job_name, build_params=None, files=None, *, initiated_by):
             kwargs["build_params"] = build_params
         if files is not None:
             kwargs["files"] = files
-        _make_crumbed_jenkins(initiated_by).get_job(job_name).invoke(**kwargs)
+        _make_crumbed_jenkins(username, groups).get_job(job_name).invoke(**kwargs)
 
     try:
         _do_invoke()
@@ -124,6 +127,31 @@ def invoke_job(job_name, build_params=None, files=None, *, initiated_by):
         else:
             raise
     return build_number
+
+
+def network_acl_params(network):
+    """``network_template_mgr`` parameters describing who may use a network's jobs."""
+    from ngcn.jenkins_config import jenkins_team_group
+
+    return {
+        "owner": network.owner.get_username() if network.owner_id else "",
+        "team_group": jenkins_team_group(network.team_id) if network.team_id else "",
+    }
+
+
+def sync_network_acl(network):
+    """Re-apply a network's Jenkins job permissions after its owner or team changed."""
+    from ngcn.utils import ServerProperties
+
+    params = {
+        "operation": "acl",
+        "src": ServerProperties.getWorkspaceLocation()
+        + "/"
+        + network.campus_type.app_zip_name,
+        "network_name": network.name,
+        **network_acl_params(network),
+    }
+    return invoke_job("network_template_mgr", build_params=params, initiated_by=None)
 
 
 def progressive_text_events(job_name, build_no):

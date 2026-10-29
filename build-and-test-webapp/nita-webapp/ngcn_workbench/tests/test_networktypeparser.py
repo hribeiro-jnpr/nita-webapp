@@ -224,7 +224,7 @@ def test_update_network_type_details_on_db_creates_actions(
 
 
 @pytest.mark.django_db
-def test_parse_project_file_invokes_job_as_initiating_user(tmp_path, monkeypatch):
+def test_parse_project_file_invokes_validator_as_service_identity(tmp_path, monkeypatch):
     import ngcn.jenkins_jobs as jenkins_jobs
     import ngcn.networktypeparser as networktypeparser
     import ngcn.utils as ngcn_utils
@@ -277,4 +277,5 @@ def test_parse_project_file_invokes_job_as_initiating_user(tmp_path, monkeypatch
 
     assert isinstance(response, JsonResponse)
     assert response.status_code == 202
-    assert initiators == ["carol"]
+    # Management job: regular users hold no Build permission on it in Jenkins.
+    assert initiators == [None]
